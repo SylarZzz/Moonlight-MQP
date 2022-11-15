@@ -1,0 +1,17 @@
+Compile Instruction for MQP
+============================
+
+download qt: https://www.qt.io/download-qt-installer?hsCtaTracking=99d9dd4f-5681-48d2-b096-470725510d34%7C074ddad0-fdef-4e53-8aa8-5e8a876d6ab4
+
+download visual studio: choose the msvc 2019, and DON'T CHOOSE MinGW! uncheck MinGW
+
+Also select win10 sdk too, any version is fine
+
+use git command(don't download from the website) : git clone https://github.com/moonlight-stream/moonlight-qt.git
+
+move to the moonlight-qt/ folder and use command do: git submodule update --init --recursive
+
+use downloaded qt create to open the .pro file
+
+and hit run
+

@@ -146,6 +146,7 @@ int pollSockets(struct pollfd* pollFds, int pollFdsCount, int timeoutMs) {
 #endif
 }
 
+
 bool isSocketReadable(SOCKET s) {
     struct pollfd pfd;
     int err;
@@ -161,6 +162,8 @@ bool isSocketReadable(SOCKET s) {
 }
 
 int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
+    timstamp();
+    printf(" recvUdpSocket called\n");
     int err;
     
     do {
@@ -176,6 +179,8 @@ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
                 return err;
             }
 
+            timestamp();
+            printf(" calls recvfrom()");
             // This won't block since the socket is readable
             err = (int)recvfrom(s, buffer, size, 0, NULL, NULL);
         }

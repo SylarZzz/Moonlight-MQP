@@ -1,4 +1,7 @@
+#include <stdlib.h>
 #include "Limelight-internal.h"
+#include <time.h>
+#include <stdio.h>
 
 #define FIRST_FRAME_MAX 1500
 #define FIRST_FRAME_TIMEOUT_SEC 10
@@ -25,6 +28,19 @@ static bool receivedFullFrame;
 // the RTP queue will wait for missing/reordered packets.
 #define RTP_QUEUE_DELAY 10
 
+
+
+// timestamp for log message
+void timestamp()
+{
+    FILE * fp;
+    time_t ltime; /* calendar time */
+    fp = fopen("console.txt","w");
+    ltime=time(NULL); /* get current cal time */
+    fprintf(fp,"xxxxxxxxxxxxxxxxxxxxxxxxx");
+    fprintf(fp,"%s",asctime( localtime(&ltime) ));
+    fclose(fp);
+}
 
 // Initialize the video stream
 void initializeVideoStream(void) {
@@ -62,8 +78,20 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
+
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
+
+    FILE *fptr = fopen("log.txt", "w");
+
+    if (fptr == NULL) {
+        printf("Could not open file");
+    }
+    fprintf(fptr, "VideoReceiveThreadProc called\n");
+    fclose(fptr);
+
+    timestamp();
+    printf(" VideoReceiveThreadProc called\n");
     int err;
     int bufferSize, receiveSize;
     char* buffer;
@@ -71,6 +99,7 @@ static void VideoReceiveThreadProc(void* context) {
     bool useSelect;
     int waitingForVideoMs;
 
+    printf("xxxxxxxxxxx");
     receiveSize = StreamConfig.packetSize + MAX_RTP_HEADER_SIZE;
     bufferSize = receiveSize + sizeof(RTPV_QUEUE_ENTRY);
     buffer = NULL;
@@ -142,6 +171,8 @@ static void VideoReceiveThreadProc(void* context) {
         packet->timestamp = BE32(packet->timestamp);
         packet->ssrc = BE32(packet->ssrc);
 
+        timestamp();
+        printf(" calls RtpvAddPacket()");
         queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize]);
 
         if (queueStatus == RTPF_RET_QUEUED) {

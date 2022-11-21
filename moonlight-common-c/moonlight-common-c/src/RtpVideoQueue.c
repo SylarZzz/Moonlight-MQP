@@ -16,6 +16,7 @@
 // RTP packets use a 90 KHz presentation timestamp clock
 #define PTS_DIVISOR 90
 
+
 void RtpvInitializeQueue(PRTP_VIDEO_QUEUE queue) {
     reed_solomon_init();
     memset(queue, 0, sizeof(*queue));
@@ -91,6 +92,9 @@ static void removeEntryFromList(PRTPV_QUEUE_LIST list, PRTPV_QUEUE_ENTRY entry) 
 
 // newEntry is contained within the packet buffer so we free the whole entry by freeing entry->packet
 static bool queuePacket(PRTP_VIDEO_QUEUE queue, PRTPV_QUEUE_ENTRY newEntry, PRTP_PACKET packet, int length, bool isParity, bool isFecRecovery) {
+    timestamp();
+    printf(" called queuePacket\n");
+
     PRTPV_QUEUE_ENTRY entry;
     bool outOfSequence;
     
@@ -166,6 +170,8 @@ static bool queuePacket(PRTP_VIDEO_QUEUE queue, PRTPV_QUEUE_ENTRY newEntry, PRTP
 
 // Returns 0 if the frame is completely constructed
 static int reconstructFrame(PRTP_VIDEO_QUEUE queue) {
+    timestamp();
+    printf(" called reconstructFrame\n");
     unsigned int totalPackets = queue->bufferDataPackets + queue->bufferParityPackets;
     unsigned int neededPackets = queue->bufferDataPackets;
     int ret;
@@ -492,6 +498,9 @@ static void stageCompleteFecBlock(PRTP_VIDEO_QUEUE queue) {
 }
 
 static void submitCompletedFrame(PRTP_VIDEO_QUEUE queue) {
+    timestamp();
+    printf(" called submitCompletedFrame");
+
     while (queue->completedFecBlockList.count > 0) {
         PRTPV_QUEUE_ENTRY entry = queue->completedFecBlockList.head;
 
@@ -505,6 +514,9 @@ static void submitCompletedFrame(PRTP_VIDEO_QUEUE queue) {
 }
 
 int RtpvAddPacket(PRTP_VIDEO_QUEUE queue, PRTP_PACKET packet, int length, PRTPV_QUEUE_ENTRY packetEntry) {
+    timestamp();
+    printf(" called RtpvAddPacket\n");
+
     if (isBefore16(packet->sequenceNumber, queue->nextContiguousSequenceNumber)) {
         // Reject packets behind our current buffer window
         return RTPF_RET_REJECTED;

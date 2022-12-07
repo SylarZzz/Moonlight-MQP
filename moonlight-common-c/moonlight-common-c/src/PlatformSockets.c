@@ -162,8 +162,7 @@ bool isSocketReadable(SOCKET s) {
 }
 
 int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
-    timstamp();
-    printf(" recvUdpSocket called\n");
+//    timestamp();
     int err;
     
     do {
@@ -179,8 +178,7 @@ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
                 return err;
             }
 
-            timestamp();
-            printf(" calls recvfrom()");
+//            timestamp();
             // This won't block since the socket is readable
             err = (int)recvfrom(s, buffer, size, 0, NULL, NULL);
         }

@@ -1,7 +1,11 @@
 #include <stdlib.h>
+#include <stdio.h>
+
 #include "Limelight-internal.h"
 #include <time.h>
-#include <stdio.h>
+#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+
+int used = 1;
 
 #define FIRST_FRAME_MAX 1500
 #define FIRST_FRAME_TIMEOUT_SEC 10
@@ -29,18 +33,74 @@ static bool receivedFullFrame;
 #define RTP_QUEUE_DELAY 10
 
 
-
 // timestamp for log message
-void timestamp()
+
+struct timezone
 {
+  int  tz_minuteswest; /* minutes W of Greenwich */
+  int  tz_dsttime;     /* type of dst correction */
+};
+
+int gettimeofday(struct timeval *tv, struct timezone *tz)
+{
+  FILETIME ft;
+  unsigned __int64 tmpres = 0;
+  static int tzflag;
+
+  if (NULL != tv)
+  {
+    GetSystemTimeAsFileTime(&ft);
+
+    tmpres |= ft.dwHighDateTime;
+    tmpres <<= 32;
+    tmpres |= ft.dwLowDateTime;
+
+    /*converting file time to unix epoch*/
+    tmpres /= 10;  /*convert into microseconds*/
+    tmpres -= DELTA_EPOCH_IN_MICROSECS;
+    tv->tv_sec = (long)(tmpres / 1000000UL);
+
+    tv->tv_usec = (long)(tmpres % 1000000UL);
+  }
+
+  if (NULL != tz)
+  {
+    if (!tzflag)
+    {
+      _tzset();
+      tzflag++;
+    }
+    tz->tz_minuteswest = _timezone / 60;
+    tz->tz_dsttime = _daylight;
+  }
+
+  return 0;
+}
+
+
+void logMsg(char *name, int num)
+{
+
+    struct timeval  tv;
+    gettimeofday(&tv, NULL);
+
+//    double time_in_mill =
+//             (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
+
     FILE * fp;
     time_t ltime; /* calendar time */
-    fp = fopen("console.txt","w");
-    ltime=time(NULL); /* get current cal time */
-    fprintf(fp,"xxxxxxxxxxxxxxxxxxxxxxxxx");
-    fprintf(fp,"%s",asctime( localtime(&ltime) ));
+    fp = fopen("aaaaaaaaaaaaaa.txt","a");
+
+
+    if(used!=0){
+        fprintf(fp,"sec,usec,name,completedFECBlockCount\n");
+        used-=1;
+    }
+
+    fprintf(fp,"%ld,%ld,%s,%d\n", tv.tv_sec, tv.tv_usec, name, num);
     fclose(fp);
 }
+
 
 // Initialize the video stream
 void initializeVideoStream(void) {
@@ -81,17 +141,9 @@ static void VideoPingThreadProc(void* context) {
 
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
+    char name[] = "VideoReceiveThreadProc";
+    //logMsg(name, NULL);
 
-    FILE *fptr = fopen("log.txt", "w");
-
-    if (fptr == NULL) {
-        printf("Could not open file");
-    }
-    fprintf(fptr, "VideoReceiveThreadProc called\n");
-    fclose(fptr);
-
-    timestamp();
-    printf(" VideoReceiveThreadProc called\n");
     int err;
     int bufferSize, receiveSize;
     char* buffer;
@@ -99,7 +151,6 @@ static void VideoReceiveThreadProc(void* context) {
     bool useSelect;
     int waitingForVideoMs;
 
-    printf("xxxxxxxxxxx");
     receiveSize = StreamConfig.packetSize + MAX_RTP_HEADER_SIZE;
     bufferSize = receiveSize + sizeof(RTPV_QUEUE_ENTRY);
     buffer = NULL;
@@ -171,8 +222,7 @@ static void VideoReceiveThreadProc(void* context) {
         packet->timestamp = BE32(packet->timestamp);
         packet->ssrc = BE32(packet->ssrc);
 
-        timestamp();
-        printf(" calls RtpvAddPacket()");
+//        timestamp();
         queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize]);
 
         if (queueStatus == RTPF_RET_QUEUED) {

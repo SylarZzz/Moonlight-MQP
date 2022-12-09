@@ -698,6 +698,9 @@ bool LiGetCurrentHostDisplayHdrMode(void);
 // frame, just that an IDR frame will arrive soon.
 void LiRequestIdrFrame(void);
 
+extern char* names[];
+void printArray();
+
 #ifdef __cplusplus
 }
 #endif

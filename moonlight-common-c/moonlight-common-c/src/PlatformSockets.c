@@ -162,7 +162,8 @@ bool isSocketReadable(SOCKET s) {
 }
 
 int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
-//    timestamp();
+    //char name[] = "recvUdpSocket";
+    //logMsg(name, NULL);
     int err;
     
     do {
@@ -178,7 +179,6 @@ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
                 return err;
             }
 
-//            timestamp();
             // This won't block since the socket is readable
             err = (int)recvfrom(s, buffer, size, 0, NULL, NULL);
         }

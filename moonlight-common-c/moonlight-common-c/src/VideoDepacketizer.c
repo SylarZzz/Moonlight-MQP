@@ -367,7 +367,8 @@ static bool isIdrFrameStart(PBUFFER_DESC buffer) {
 
 // Reassemble the frame with the given frame number
 static void reassembleFrame(int frameNumber) {
-//    timestamp();
+    char name[] = "reassembleFrame";
+    logMsg(name, NULL);
 
     if (nalChainHead != NULL) {
         QUEUED_DECODE_UNIT qduDS;
@@ -401,7 +402,7 @@ static void reassembleFrame(int frameNumber) {
             nalChainDataLength = 0;
 
             if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
-//                timestamp();
+
 
                 if (LbqOfferQueueItem(&decodeUnitQueue, qdu, &qdu->entry) == LBQ_BOUND_EXCEEDED) {
                     Limelog("Video decode unit queue overflow\n");
@@ -420,7 +421,6 @@ static void reassembleFrame(int frameNumber) {
                     // Free all frames in the decode unit queue
                     freeDecodeUnitList(LbqFlushQueueItems(&decodeUnitQueue));
 
-//                    timestamp();
                     // Request an IDR frame to recover
                     LiRequestIdrFrame();
                     return;
@@ -929,7 +929,8 @@ void notifyFrameLost(unsigned int frameNumber, bool speculative) {
 
 // Add an RTP Packet to the queue
 void queueRtpPacket(PRTPV_QUEUE_ENTRY queueEntryPtr) {
-//    timestamp();
+    char name[] = "queueRtpPacket";
+    logMsg(name, NULL);
 
     int dataOffset;
     RTPV_QUEUE_ENTRY queueEntry = *queueEntryPtr;
@@ -949,7 +950,6 @@ void queueRtpPacket(PRTPV_QUEUE_ENTRY queueEntryPtr) {
     PLENTRY_INTERNAL existingEntry = (PLENTRY_INTERNAL)queueEntryPtr;
     existingEntry->allocPtr = queueEntry.packet;
 
-//    timestamp();
     processRtpPayload((PNV_VIDEO_PACKET)(((char*)queueEntry.packet) + dataOffset),
                       queueEntry.length - dataOffset,
                       queueEntry.receiveTimeMs,

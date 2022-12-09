@@ -1,4 +1,6 @@
 #define _GNU_SOURCE
+#include <stdlib.h>
+#include <stdio.h>
 #include "Limelight-internal.h"
 
 // The maximum amount of time before observing an interrupt
@@ -425,7 +427,7 @@ int initializePlatform(void) {
     }
 
     enterLowLatencyMode();
-
+//    printArray();
 	return 0;
 }
 
@@ -435,7 +437,7 @@ void cleanupPlatform(void) {
     cleanupPlatformSockets();
     
     enet_deinitialize();
-
+//    printArray();
     LC_ASSERT(activeThreads == 0);
     LC_ASSERT(activeMutexes == 0);
     LC_ASSERT(activeEvents == 0);

@@ -6,6 +6,8 @@
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
 int used = 1;
+int count = 0;
+char* names[100000];
 
 #define FIRST_FRAME_MAX 1500
 #define FIRST_FRAME_TIMEOUT_SEC 10
@@ -77,19 +79,35 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
   return 0;
 }
 
+void appendArray(char *name){
+    names[count]=name;
+
+    printf("%s\n",names[count]);
+    count += 1;
+}
+
+void printArray(){
+    FILE * fp;
+    fp = fopen("bbbbbb.txt","a");
+    printf("count outside loop: %d", count);
+    for (int i = 0; i < count; i++){
+        printf("count inside loop: %d", count);
+        fprintf(fp,"%s",names[i]);
+    }
+    fclose(fp);
+}
 
 void logMsg(char *name, int num)
 {
-
     struct timeval  tv;
     gettimeofday(&tv, NULL);
 
 //    double time_in_mill =
-//             (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
+//    (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
 
     FILE * fp;
     time_t ltime; /* calendar time */
-    fp = fopen("aaaaaaaaaaaaaa.txt","a");
+    fp = fopen("aaaaaaa.csv","a");
 
 
     if(used!=0){
@@ -141,8 +159,13 @@ static void VideoPingThreadProc(void* context) {
 
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
+    /*
+     * Adding logMsg here makes the streaming look glitchy
+     */
+
     char name[] = "VideoReceiveThreadProc";
     //logMsg(name, NULL);
+    appendArray(name);
 
     int err;
     int bufferSize, receiveSize;
@@ -222,7 +245,7 @@ static void VideoReceiveThreadProc(void* context) {
         packet->timestamp = BE32(packet->timestamp);
         packet->ssrc = BE32(packet->ssrc);
 
-//        timestamp();
+
         queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize]);
 
         if (queueStatus == RTPF_RET_QUEUED) {

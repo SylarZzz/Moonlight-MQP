@@ -310,7 +310,6 @@ void Pacer::renderFrame(AVFrame* frame)
 
 void Pacer::dropFrameForEnqueue(QQueue<AVFrame*>& queue)
 {
-    printf("%d",queue.size());
     SDL_assert(queue.size() <= MAX_QUEUED_FRAMES);
     if (queue.size() == MAX_QUEUED_FRAMES) {    // print 
         AVFrame* frame = queue.dequeue();

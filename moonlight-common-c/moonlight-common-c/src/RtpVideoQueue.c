@@ -516,8 +516,8 @@ static void submitCompletedFrame(PRTP_VIDEO_QUEUE queue) {
 int RtpvAddPacket(PRTP_VIDEO_QUEUE queue, PRTP_PACKET packet, int length, PRTPV_QUEUE_ENTRY packetEntry) {
 
     char name[] = "RtpvAddPacket";
-//    logMsg(name, NULL);
-    appendArray(name);
+    logMsg(name, NULL);
+//    appendArray(name);
 
     if (isBefore16(packet->sequenceNumber, queue->nextContiguousSequenceNumber)) {
         // Reject packets behind our current buffer window

@@ -222,6 +222,9 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     PQUEUED_DECODE_UNIT qdu = handle;
     PLENTRY_INTERNAL lastEntry;
 
+    char name[] = "LiCompleteVideoFrame";
+    logMsg(name, NULL);
+
     if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
         notifyKeyFrameReceived();
     }
@@ -632,6 +635,9 @@ static int isFirstPacket(uint8_t flags, uint8_t fecBlockNumber) {
 static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
                        uint64_t receiveTimeMs, unsigned int presentationTimeMs,
                        PLENTRY_INTERNAL* existingEntry) {
+    char name[] = "processRtpPayload";
+    logMsg(name, NULL);
+
     BUFFER_DESC currentPos;
     uint32_t frameIndex;
     uint8_t flags;

@@ -5,6 +5,7 @@
 #include <time.h>
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
+FILE *fp;
 int used = 1;
 int count = 0;
 char* names[100000];
@@ -79,22 +80,9 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
   return 0;
 }
 
-void appendArray(char *name){
-    names[count]=name;
 
-    printf("%s\n",names[count]);
-    count += 1;
-}
-
-void printArray(){
-    FILE * fp;
-    fp = fopen("bbbbbb.txt","a");
-    printf("count outside loop: %d", count);
-    for (int i = 0; i < count; i++){
-        printf("count inside loop: %d", count);
-        fprintf(fp,"%s",names[i]);
-    }
-    fclose(fp);
+void openFile() {
+    fp = fopen("aaaaaaa.csv","w+");
 }
 
 void logMsg(char *name, int num)
@@ -105,9 +93,11 @@ void logMsg(char *name, int num)
 //    double time_in_mill =
 //    (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
 
-    FILE * fp;
-    time_t ltime; /* calendar time */
-    fp = fopen("aaaaaaa.csv","a");
+
+
+    //FILE * fp;
+    time_t ltime;
+    //fp = fopen("aaaaaaa.csv","w+");
 
 
     if(used!=0){
@@ -116,7 +106,7 @@ void logMsg(char *name, int num)
     }
 
     fprintf(fp,"%ld,%ld,%s,%d\n", tv.tv_sec, tv.tv_usec, name, num);
-    fclose(fp);
+//    fclose(fp);
 }
 
 
@@ -156,16 +146,21 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
-
+int called = 0;
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
     /*
      * Adding logMsg here makes the streaming look glitchy
      */
 
+    if (called == 0) {
+        openFile();
+        called = 1;
+    }
+
     char name[] = "VideoReceiveThreadProc";
-    //logMsg(name, NULL);
-    appendArray(name);
+    logMsg(name, NULL);
+
 
     int err;
     int bufferSize, receiveSize;

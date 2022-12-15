@@ -162,8 +162,8 @@ bool isSocketReadable(SOCKET s) {
 }
 
 int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect) {
-    //char name[] = "recvUdpSocket";
-    //logMsg(name, NULL);
+    char name[] = "recvUdpSocket";
+    logMsg(name, NULL);
     int err;
     
     do {

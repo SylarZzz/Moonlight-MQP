@@ -1,5 +1,41 @@
 #include "Limelight-internal.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+
+FILE *file;
+int used1 = 1;
+
+struct timezone
+{
+  int  tz_minuteswest; /* minutes W of Greenwich */
+  int  tz_dsttime;     /* type of dst correction */
+};
+
+
+
+
+void openFileForHandle() {
+    file = fopen("trackHandle.csv","w+");
+}
+
+void trackHandle(int frameNum, int length)
+{
+    struct timeval  tv;
+    gettimeofday(&tv, NULL);
+
+    time_t ltime;
+
+    if(used1!=0){
+        fprintf(file,"sec,usec,frameNumber,fullLength\n");
+        used1-=1;
+    }
+
+    fprintf(file,"%ld,%ld,%d,%d\n", tv.tv_sec, tv.tv_usec, frameNum, length);
+}
+
 // Uncomment to test 3 byte Annex B start sequences with GFE
 //#define FORCE_3_BYTE_START_SEQUENCES
 
@@ -217,13 +253,23 @@ void LiWakeWaitForVideoFrame(void) {
     LbqSignalQueueUserWake(&decodeUnitQueue);
 }
 
+int called1 = 0;
+
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     PQUEUED_DECODE_UNIT qdu = handle;
     PLENTRY_INTERNAL lastEntry;
 
+    //printf("%d,",qdu->decodeUnit.frameNumber);
     char name[] = "LiCompleteVideoFrame";
     logMsg(name, NULL);
+
+    if (called1 == 0) {
+        openFileForHandle();
+        called1 = 1;
+    }
+    trackHandle(qdu->decodeUnit.frameNumber, qdu->decodeUnit.fullLength);
+
 
     if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
         notifyKeyFrameReceived();

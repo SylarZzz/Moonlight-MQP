@@ -11,6 +11,7 @@
 #include <QCursor>
 #include <QElapsedTimer>
 #include <QFile>
+#include <iostream>
 
 // Don't let SDL hook our main function, since Qt is already
 // doing the same thing. This needs to be before any headers
@@ -20,6 +21,7 @@
 
 #ifdef HAVE_FFMPEG
 #include "streaming/video/ffmpeg.h"
+
 #endif
 
 #if defined(Q_OS_WIN32)
@@ -43,6 +45,8 @@
 #include "streaming/session.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
+
+#include "Queue.h"
 
 #if !defined(QT_DEBUG) && defined(Q_OS_WIN32)
 // Log to file for release Windows builds
@@ -70,6 +74,8 @@ static int s_LogLinesWritten = 0;
 static bool s_LogLimitReached = false;
 static QFile* s_LoggerFile;
 #endif
+
+
 
 void logToLoggerStream(QString& message)
 {
@@ -272,9 +278,35 @@ LONG WINAPI UnhandledExceptionHandler(struct _EXCEPTION_POINTERS *ExceptionInfo)
 }
 
 #endif
+/*
+// Test cases for Queue
+void queueTest() {
+    Queue q;
+
+    q.enqueue(1);
+    q.enqueue(2);
+    q.enqueue(3);
+
+    cout << "The front element is " << q.peek() << endl;
+    q.dequeue();
+
+    q.enqueue(4);
+
+    cout << "The queue size is " << q.size() << endl;
+
+    q.dequeue();
+    q.dequeue();
+    q.dequeue();
+
+    cout << "isEmpty? = " << q.isEmpty() << endl;
+    q.dequeue();
+    cout << "size = " << q.size() << endl;
+}
+*/
 
 int main(int argc, char *argv[])
 {
+    //queueTest();
     SDL_SetMainReady();
 
     // Set the app version for the QCommandLineParser's showVersion() command

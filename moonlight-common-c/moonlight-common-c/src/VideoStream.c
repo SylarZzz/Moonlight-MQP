@@ -1,7 +1,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-
 #include "Limelight-internal.h"
 #include <time.h>
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
@@ -23,13 +22,18 @@ static RTP_VIDEO_QUEUE rtpQueue;
 static SOCKET rtpSocket = INVALID_SOCKET;
 static SOCKET firstFrameSocket = INVALID_SOCKET;
 
+static PLT_THREAD HELLO;
+static PLT_THREAD HELLO2;
 static PLT_THREAD udpPingThread;
 static PLT_THREAD receiveThread;
 static PLT_THREAD decoderThread;
+static PLT_MUTEX helloMutex;
 
 static bool receivedDataFromPeer;
 static uint64_t firstDataTimeMs;
 static bool receivedFullFrame;
+
+static int helloNum=99999;
 
 // We can't request an IDR frame until the depacketizer knows
 // that a packet was lost. This timeout bounds the time that
@@ -44,6 +48,11 @@ struct timezone
   int  tz_minuteswest; /* minutes W of Greenwich */
   int  tz_dsttime;     /* type of dst correction */
 };
+
+void waitFor (unsigned int secs) {
+    unsigned int retTime = time(0) + secs;   // Get finishing time.
+    while (time(0) < retTime);               // Loop until it arrives.
+}
 
 int gettimeofday(struct timeval *tv, struct timezone *tz)
 {
@@ -148,6 +157,23 @@ static void VideoPingThreadProc(void* context) {
 }
 
 int called = 0;
+
+// TEST FUNCTION HELLO WORLD
+static void TestHello2() {
+
+    PltCreateMutex(&helloMutex);
+    PltLockMutex(&helloMutex);
+    Limelog("%s","start sleep");
+    waitFor(30);
+    PltUnlockMutex(&helloMutex);
+    PltDeleteMutex(&helloMutex);
+
+}
+
+static void TestHello() {
+    helloNum+=1;
+    Limelog("%s","!!!!!!!!!!!");
+}
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
     /*
@@ -353,6 +379,13 @@ int startVideoStream(void* rendererContext, int drFlags) {
 
     VideoCallbacks.start();
 
+    err = PltCreateThread("HELLOTHREAD", TestHello, NULL, &HELLO);
+    err = PltCreateThread("HELLOTHREAD2", TestHello2, NULL, &HELLO2);
+    TestHello();
+//    if (err != 0){
+//        PltCloseThread(&HELLO);
+//    }
+
     err = PltCreateThread("VideoRecv", VideoReceiveThreadProc, NULL, &receiveThread);
     if (err != 0) {
         VideoCallbacks.stop();
@@ -398,7 +431,8 @@ int startVideoStream(void* rendererContext, int drFlags) {
             return LastSocketError();
         }
     }
-
+    PltCloseThread(&HELLO);
+    PltCloseThread(&HELLO2);
     // Start pinging before reading the first frame so GFE knows where
     // to send UDP data
     err = PltCreateThread("VideoPing", VideoPingThreadProc, NULL, &udpPingThread);

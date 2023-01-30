@@ -74,7 +74,6 @@ SOURCES += \
     $$COMMON_C_DIR/src/SimpleStun.c \
     $$COMMON_C_DIR/src/VideoDepacketizer.c \
     $$COMMON_C_DIR/src/VideoStream.c \
-    moonlight-common-c/src/Queue.c \
     moonlight-common-c/src/testQueue.c
 HEADERS += \
     $$COMMON_C_DIR/src/Limelight.h
@@ -89,7 +88,10 @@ CONFIG(debug, debug|release) {
     DEFINES += LC_DEBUG
 }
 
+
 # Older GCC versions defaulted to GNU89
 *-g++ {
+    QMAKE_CXXFLAGS += -x
+    QMAKE_CXXFLAGS += c++
     QMAKE_CFLAGS += -std=gnu99
 }

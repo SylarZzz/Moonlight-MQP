@@ -1,17 +1,19 @@
 //
 // Created by Sylar Zhang on 1/24/2023.
 //
+
 #include <iostream>
 #include "Queue.h"
-using namespace std;
+
+//using namespace std;
 
 void Queue::dequeue()
 {
     if (q.size() > 0) {
-        cout << "Dequeued " << q.front() << endl;
+        std::cout << "Dequeued " << q.front() << std::endl;
         q.pop();
     } else {
-        cout << "Cannot dequeue empty queue.\n";
+        std::cout << "Cannot dequeue empty queue.\n";
     }
 
 }
@@ -19,5 +21,5 @@ void Queue::dequeue()
 void Queue::enqueue(int item)
 {
     q.push(item);
-    cout << "Enqueued " << item << endl;
+    std::cout << "Enqueued " << item << std::endl;
 }

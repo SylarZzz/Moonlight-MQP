@@ -74,9 +74,13 @@ SOURCES += \
     $$COMMON_C_DIR/src/SimpleStun.c \
     $$COMMON_C_DIR/src/VideoDepacketizer.c \
     $$COMMON_C_DIR/src/VideoStream.c \
+    moonlight-common-c/src/queue.cpp \
+    moonlight-common-c/src/queue.cpp \
     moonlight-common-c/src/testQueue.c
 HEADERS += \
-    $$COMMON_C_DIR/src/Limelight.h
+    $$COMMON_C_DIR/src/Limelight.h \
+    moonlight-common-c/src/Queue.h \
+    moonlight-common-c/src/queue.h
 INCLUDEPATH += \
     $$RS_DIR \
     $$ENET_DIR/include \

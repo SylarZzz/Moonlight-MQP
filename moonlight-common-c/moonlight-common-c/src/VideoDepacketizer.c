@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+
+#include "Queue.h"
+
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
 FILE *file;
@@ -254,12 +257,46 @@ void LiWakeWaitForVideoFrame(void) {
 }
 
 int called1 = 0;
+static Queue *q;
+static PLT_THREAD testQMain;
+static PLT_THREAD testQSecond;
+static PLT_MUTEX qMainMutex;
+static PLT_MUTEX qSecondMutex;
+
+static VIDEO_FRAME_HANDLE frameHandle;
+
+static void testEnQ() {
+    PltCreateMutex(&qMainMutex);
+    PltLockMutex(&qMainMutex);
+    enqueue(q, frameHandle);
+    PQUEUED_DECODE_UNIT qduHandle = frameHandle;
+    Limelog("Qdu: enqueued frame number %d\n", qduHandle->decodeUnit.frameNumber);
+    PltUnlockMutex(&qMainMutex);
+    PltDeleteMutex(&qMainMutex);
+}
+
+static void testDeQ() {
+    PltCreateMutex(&qSecondMutex);
+    PltLockMutex(&qSecondMutex);
+    PQUEUED_DECODE_UNIT qduHandle = frameHandle;
+    Limelog("Qdu: dequeued frame number %d\n", qduHandle->decodeUnit.frameNumber);
+    dequeue(q);
+    PltUnlockMutex(&qSecondMutex);
+    PltDeleteMutex(&qSecondMutex);
+}
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     PQUEUED_DECODE_UNIT qdu = handle;
+
+    int err;
+    frameHandle = handle;
+    q = createQueue();
+
     PLENTRY_INTERNAL lastEntry;
 
+    err = PltCreateThread("testQMainTHREAD", testEnQ, NULL, &testQMain);
+    err = PltCreateThread("testQSecondTHREAD", testDeQ, NULL, &testQSecond);
     //printf("%d,",qdu->decodeUnit.frameNumber);
     char name[] = "LiCompleteVideoFrame";
     logMsg(name, NULL);
@@ -295,6 +332,9 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
         free(qdu);
     }
+
+    PltCloseThread(&testQMain);
+    PltCloseThread(&testQSecond);
 }
 
 static bool isSeqReferenceFrameStart(PBUFFER_DESC buffer) {

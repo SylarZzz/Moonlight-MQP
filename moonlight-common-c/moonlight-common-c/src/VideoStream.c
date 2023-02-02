@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include "Limelight-internal.h"
 #include <time.h>
+#include "Queue.h"
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+
 
 FILE *fp;
 int used = 1;
@@ -34,6 +36,7 @@ static uint64_t firstDataTimeMs;
 static bool receivedFullFrame;
 
 static int helloNum=99999;
+
 
 // We can't request an IDR frame until the depacketizer knows
 // that a packet was lost. This timeout bounds the time that
@@ -157,14 +160,17 @@ static void VideoPingThreadProc(void* context) {
 }
 
 int called = 0;
+//static Queue *q;
 
 // TEST FUNCTION HELLO WORLD
 static void TestHello2() {
+    //q = createQueue();
 
     PltCreateMutex(&helloMutex);
     PltLockMutex(&helloMutex);
     Limelog("%s","start sleep");
-    waitFor(30);
+    //queueTest();
+    //waitFor(30);
     PltUnlockMutex(&helloMutex);
     PltDeleteMutex(&helloMutex);
 

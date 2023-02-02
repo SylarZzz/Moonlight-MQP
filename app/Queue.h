@@ -3,7 +3,6 @@
 //
 
 #include <queue>
-using namespace std;
 
 #ifndef UNTITLED4_QUEUE_H
 #define UNTITLED4_QUEUE_H
@@ -13,7 +12,7 @@ class Queue
 {
 
 private:
-    queue<int> q;
+    std::queue<int> q;
 
 public:
     void dequeue();
@@ -26,3 +25,4 @@ public:
 
 
 #endif //UNTITLED4_QUEUE_H
+

@@ -38,6 +38,8 @@ static bool receivedFullFrame;
 static int helloNum=99999;
 
 
+
+
 // We can't request an IDR frame until the depacketizer knows
 // that a packet was lost. This timeout bounds the time that
 // the RTP queue will wait for missing/reordered packets.
@@ -123,6 +125,7 @@ void logMsg(char *name, int num)
 }
 
 
+
 // Initialize the video stream
 void initializeVideoStream(void) {
     initializeVideoDepacketizer(StreamConfig.packetSize);
@@ -179,6 +182,7 @@ static void TestHello2() {
 static void TestHello() {
     helloNum+=1;
     Limelog("%s","!!!!!!!!!!!");
+    timer();
 }
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {

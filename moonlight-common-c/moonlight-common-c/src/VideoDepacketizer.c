@@ -6,6 +6,7 @@
 
 #include "Queue.h"
 
+
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
 FILE *file;
@@ -17,7 +18,20 @@ struct timezone
   int  tz_dsttime;     /* type of dst correction */
 };
 
+struct timeval start;
+struct timeval finish;
 
+void timer(){
+
+    gettimeofday(&start,NULL);
+
+    for(int i=0;i<5;i++){
+        waitFor(1);
+    }
+    gettimeofday(&finish,NULL);
+    int count=finish.tv_sec-start.tv_sec;
+    printf("%s,%ld\n","timer test",count);
+}
 
 
 void openFileForHandle() {
@@ -275,12 +289,17 @@ static void testEnQ() {
     PltDeleteMutex(&qMainMutex);
 }
 
+// Pulls frame 60 times per second
 static void testDeQ() {
     PltCreateMutex(&qSecondMutex);
     PltLockMutex(&qSecondMutex);
+    gettimeofday(&start,NULL);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
     Limelog("Qdu: dequeued frame number %d\n", qduHandle->decodeUnit.frameNumber);
     dequeue(q);
+    gettimeofday(&finish,NULL);
+    int count=(finish.tv_usec-start.tv_usec)*1000;
+    waitfor(0.0167-count);
     PltUnlockMutex(&qSecondMutex);
     PltDeleteMutex(&qSecondMutex);
 }
@@ -321,6 +340,8 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         // reference frame invalidation.
         idrFrameProcessed = true;
     }
+
+    // Sylar: is this where the last entry is added to the buffer?
 
     while (qdu->decodeUnit.bufferList != NULL) {
         lastEntry = (PLENTRY_INTERNAL)qdu->decodeUnit.bufferList;

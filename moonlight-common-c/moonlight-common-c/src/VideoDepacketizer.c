@@ -299,7 +299,7 @@ static void testDeQ() {
     dequeue(q);
     gettimeofday(&finish,NULL);
     int count=(finish.tv_usec-start.tv_usec)*1000;
-    waitfor(0.0167-count);
+    waitFor(0.0167-count);
     PltUnlockMutex(&qSecondMutex);
     PltDeleteMutex(&qSecondMutex);
 }

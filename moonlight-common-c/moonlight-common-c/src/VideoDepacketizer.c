@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-
+#include <windows.h>
 #include "Queue.h"
 
 
@@ -11,6 +11,13 @@
 
 FILE *file;
 int used1 = 1;
+int called1 = 0;
+static Queue *q;
+static PLT_THREAD testQMain;
+static PLT_THREAD testQSecond;
+static PLT_MUTEX qMainMutex;
+static PLT_MUTEX qSecondMutex;
+static VIDEO_FRAME_HANDLE frameHandle;
 
 struct timezone
 {
@@ -72,6 +79,7 @@ static uint64_t firstPacketReceiveTime;
 static unsigned int firstPacketPresentationTime;
 static bool dropStatePending;
 static bool idrFrameProcessed;
+static int targetTime=17;
 
 #define DR_CLEANUP -1000
 
@@ -104,6 +112,8 @@ typedef struct _LENTRY_INTERNAL {
 #define HEVC_NAL_TYPE_AUD 35
 #define HEVC_NAL_TYPE_SEI 39
 
+FILE *fp;
+
 // Init
 void initializeVideoDepacketizer(int pktSize) {
     LbqInitializeLinkedBlockingQueue(&decodeUnitQueue, 15);
@@ -120,6 +130,9 @@ void initializeVideoDepacketizer(int pktSize) {
     dropStatePending = false;
     idrFrameProcessed = false;
     strictIdrFrameWait = !isReferenceFrameInvalidationEnabled();
+    PltCreateMutex(&qSecondMutex);
+    PltCreateMutex(&qMainMutex);
+    fp = fopen("timelog.csv","w+");
 }
 
 // Free the NAL chain
@@ -270,52 +283,54 @@ void LiWakeWaitForVideoFrame(void) {
     LbqSignalQueueUserWake(&decodeUnitQueue);
 }
 
-int called1 = 0;
-static Queue *q;
-static PLT_THREAD testQMain;
-static PLT_THREAD testQSecond;
-static PLT_MUTEX qMainMutex;
-static PLT_MUTEX qSecondMutex;
 
-static VIDEO_FRAME_HANDLE frameHandle;
+
 
 static void testEnQ() {
-    PltCreateMutex(&qMainMutex);
     PltLockMutex(&qMainMutex);
     enqueue(q, frameHandle);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
-    Limelog("Qdu: enqueued frame number %d\n", qduHandle->decodeUnit.frameNumber);
+    //Limelog("Qdu: enqueued frame number %d\n", qduHandle->decodeUnit.frameNumber);
     PltUnlockMutex(&qMainMutex);
     PltDeleteMutex(&qMainMutex);
 }
 
 // Pulls frame 60 times per second
 static void testDeQ() {
-    PltCreateMutex(&qSecondMutex);
-    PltLockMutex(&qSecondMutex);
     gettimeofday(&start,NULL);
+    PltLockMutex(&qSecondMutex);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
-    Limelog("Qdu: dequeued frame number %d\n", qduHandle->decodeUnit.frameNumber);
+    //Limelog("Qdu: dequeued frame number %d\n", qduHandle->decodeUnit.frameNumber);
     dequeue(q);
-    gettimeofday(&finish,NULL);
-    int count=(finish.tv_usec-start.tv_usec)*1000;
-    waitFor(0.0167-count);
     PltUnlockMutex(&qSecondMutex);
+    gettimeofday(&finish,NULL);
+    float finishUsec = finish.tv_usec;
+    float finishSec = finish.tv_sec;
+    float startSec = start.tv_sec;
+    float startUsec = start.tv_usec;
+    // Before time - after time in millisec
+    float count=((finishSec+(finishUsec/1000000))-(startSec+(startUsec/1000000)))*1000;
+    //float count=((finishUsec/1000000) * 1000) + (finishSec*1000);
+    //float count2 = ((startUsec/1000000) * 1000) + (startSec*1000);
+    fprintf(fp,"%d",count);//Log time
+    printf("beforetime-afterTime= %f\n", count);
+    if (count < 0) {
+        // TODO: adjust targetTime accordingly
+    }
+    Sleep(targetTime-count);
     PltDeleteMutex(&qSecondMutex);
 }
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     PQUEUED_DECODE_UNIT qdu = handle;
-
     int err;
     frameHandle = handle;
     q = createQueue();
-
     PLENTRY_INTERNAL lastEntry;
 
-    err = PltCreateThread("testQMainTHREAD", testEnQ, NULL, &testQMain);
     err = PltCreateThread("testQSecondTHREAD", testDeQ, NULL, &testQSecond);
+    err = PltCreateThread("testQMainTHREAD", testEnQ, NULL, &testQMain);
     //printf("%d,",qdu->decodeUnit.frameNumber);
     char name[] = "LiCompleteVideoFrame";
     logMsg(name, NULL);
@@ -341,7 +356,6 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         idrFrameProcessed = true;
     }
 
-    // Sylar: is this where the last entry is added to the buffer?
 
     while (qdu->decodeUnit.bufferList != NULL) {
         lastEntry = (PLENTRY_INTERNAL)qdu->decodeUnit.bufferList;
@@ -354,8 +368,9 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         free(qdu);
     }
 
-    PltCloseThread(&testQMain);
+
     PltCloseThread(&testQSecond);
+    PltCloseThread(&testQMain);
 }
 
 static bool isSeqReferenceFrameStart(PBUFFER_DESC buffer) {

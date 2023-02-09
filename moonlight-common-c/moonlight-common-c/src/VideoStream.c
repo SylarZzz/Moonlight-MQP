@@ -4,6 +4,7 @@
 #include "Limelight-internal.h"
 #include <time.h>
 #include "Queue.h"
+#include "VideoDepacketizer.h"
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
 
@@ -109,7 +110,6 @@ void logMsg(char *name, int num)
 //    (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
 
 
-
     //FILE * fp;
     time_t ltime;
     //fp = fopen("aaaaaaa.csv","w+");
@@ -124,7 +124,7 @@ void logMsg(char *name, int num)
 //    fclose(fp);
 }
 
-
+PLT_THREAD bufferThread;
 
 // Initialize the video stream
 void initializeVideoStream(void) {
@@ -133,6 +133,9 @@ void initializeVideoStream(void) {
     receivedDataFromPeer = false;
     firstDataTimeMs = 0;
     receivedFullFrame = false;
+
+    //int err;
+    //err = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
 }
 
 // Clean up the video stream
@@ -182,7 +185,7 @@ static void TestHello2() {
 static void TestHello() {
     helloNum+=1;
     Limelog("%s","!!!!!!!!!!!");
-    timer();
+    //timer();
 }
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {

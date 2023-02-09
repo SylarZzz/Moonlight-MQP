@@ -80,6 +80,7 @@ SOURCES += \
 HEADERS += \
     $$COMMON_C_DIR/src/Limelight.h \
     moonlight-common-c/src/Queue.h \
+    moonlight-common-c/src/VideoDepacketizer.h \
     moonlight-common-c/src/queue.h
 INCLUDEPATH += \
     $$RS_DIR \

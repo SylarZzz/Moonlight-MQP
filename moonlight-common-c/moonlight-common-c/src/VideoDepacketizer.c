@@ -12,12 +12,14 @@
 FILE *file;
 int used1 = 1;
 int called1 = 0;
-static Queue *q;
+static Queue *frameQ;
+static Queue *drstatusQ;
 static PLT_THREAD testQMain;
 static PLT_THREAD testQSecond;
 static PLT_MUTEX qMainMutex;
 static PLT_MUTEX qSecondMutex;
 static VIDEO_FRAME_HANDLE frameHandle;
+static int drstatusHandle;
 
 struct timezone
 {
@@ -25,9 +27,8 @@ struct timezone
   int  tz_dsttime;     /* type of dst correction */
 };
 
-struct timeval start;
-struct timeval finish;
 
+/*
 void timer(){
 
     gettimeofday(&start,NULL);
@@ -39,7 +40,7 @@ void timer(){
     int count=finish.tv_sec-start.tv_sec;
     printf("%s,%ld\n","timer test",count);
 }
-
+*/
 
 void openFileForHandle() {
     file = fopen("trackHandle.csv","w+");
@@ -79,7 +80,7 @@ static uint64_t firstPacketReceiveTime;
 static unsigned int firstPacketPresentationTime;
 static bool dropStatePending;
 static bool idrFrameProcessed;
-static int targetTime=17;
+static int targetTime = 17;
 
 #define DR_CLEANUP -1000
 
@@ -288,7 +289,8 @@ void LiWakeWaitForVideoFrame(void) {
 
 static void testEnQ() {
     PltLockMutex(&qMainMutex);
-    enqueue(q, frameHandle);
+    enqueue(frameQ, frameHandle);
+    enqueue(drstatusQ, drstatusHandle);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
     //Limelog("Qdu: enqueued frame number %d\n", qduHandle->decodeUnit.frameNumber);
     PltUnlockMutex(&qMainMutex);
@@ -297,28 +299,79 @@ static void testEnQ() {
 
 // Pulls frame 60 times per second
 static void testDeQ() {
+    struct timeval start;
+    struct timeval finish;
+
     gettimeofday(&start,NULL);
+    time_t ltime;
     PltLockMutex(&qSecondMutex);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
     //Limelog("Qdu: dequeued frame number %d\n", qduHandle->decodeUnit.frameNumber);
-    dequeue(q);
+    dequeue(frameQ);
+    dequeue(drstatusQ);
     PltUnlockMutex(&qSecondMutex);
     gettimeofday(&finish,NULL);
-    float finishUsec = finish.tv_usec;
-    float finishSec = finish.tv_sec;
-    float startSec = start.tv_sec;
-    float startUsec = start.tv_usec;
-    // Before time - after time in millisec
-    float count=((finishSec+(finishUsec/1000000))-(startSec+(startUsec/1000000)))*1000;
-    //float count=((finishUsec/1000000) * 1000) + (finishSec*1000);
-    //float count2 = ((startUsec/1000000) * 1000) + (startSec*1000);
-    fprintf(fp,"%d",count);//Log time
-    printf("beforetime-afterTime= %f\n", count);
-    if (count < 0) {
+    double startMillsec = (start.tv_sec) * 1000 + (start.tv_usec) / 1000 ;
+    double endMillsec = (finish.tv_sec) * 1000 + (finish.tv_usec) / 1000 ;
+    double ellapsedMilli = endMillsec - startMillsec;
+
+    fprintf(fp,"%d",ellapsedMilli);//Log time
+    printf("beforetime= %lf\n", startMillsec);
+    printf("afterTime= %lf\n", endMillsec);
+    printf("beforetime-afterTime= %lf\n", ellapsedMilli);
+
+    long sleepTime = (long) targetTime - (long) ellapsedMilli;
+    if (sleepTime < 0) {
         // TODO: adjust targetTime accordingly
     }
-    Sleep(targetTime-count);
+
+    Sleep(sleepTime);
     PltDeleteMutex(&qSecondMutex);
+}
+
+FILE *qLog;
+int usedforQlog = 1;
+
+void openQFile() {
+    qLog = fopen("queueLog.csv","w+");
+}
+
+void playoutBufferMain() {
+
+    struct timeval startT;
+    struct timeval endT;
+
+    openQFile();
+    if (usedforQlog != 0) {
+        fprintf(qLog, "startTime,frameQSize,drstatusQSize\n");
+        usedforQlog = 0;
+    }
+
+    static PLT_MUTEX mutex;
+    PltCreateMutex(&mutex);
+    int frameQSize, drstatusQSize;
+
+    while (1) {
+        gettimeofday(&startT, NULL);
+        time_t ltimeStart;
+        double startMillsec = (startT.tv_sec) * 1000 + (startT.tv_usec) / 1000 ;
+
+        PltLockMutex(&mutex);
+        testDeQ();
+        frameQSize = frameQ->size;
+        drstatusQSize = drstatusQ->size;
+        fprintf(qLog, "%lf,%d,%d\n", startMillsec, frameQSize, drstatusQSize);
+        PltUnlockMutex(&mutex);
+
+        gettimeofday(&endT, NULL);
+        time_t ltimeEnd;
+        double endMillsec = (endT.tv_sec) * 1000 + (endT.tv_usec) / 1000 ;
+        double ellapsedMilli = endMillsec - startMillsec;
+        Sleep(targetTime - ellapsedMilli);
+    }
+
+    PltDeleteMutex(&mutex);
+    // TODO: close file
 }
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
@@ -326,12 +379,14 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     PQUEUED_DECODE_UNIT qdu = handle;
     int err;
     frameHandle = handle;
-    q = createQueue();
+    drstatusHandle = drStatus;
+    frameQ = createQueue();
+    drstatusQ = createQueue();
     PLENTRY_INTERNAL lastEntry;
 
     err = PltCreateThread("testQSecondTHREAD", testDeQ, NULL, &testQSecond);
     err = PltCreateThread("testQMainTHREAD", testEnQ, NULL, &testQMain);
-    //printf("%d,",qdu->decodeUnit.frameNumber);
+
     char name[] = "LiCompleteVideoFrame";
     logMsg(name, NULL);
 

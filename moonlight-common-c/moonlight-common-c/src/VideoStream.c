@@ -8,8 +8,13 @@
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
 
+FILE *qLog;
+int usedforQlog = 1;
+int opened = 0;
+
 FILE *fp;
 int used = 1;
+int called = 0;
 int count = 0;
 char* names[100000];
 
@@ -99,9 +104,19 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 
 void openFile() {
     fp = fopen("aaaaaaa.csv","w+");
+    qLog = fopen("queueLog.csv","w+");
+
 }
 
-void logMsg(char *name, int num)
+void logQMsg(double startmsec, int frameQSize, int drQSize) {
+    if (usedforQlog != 0) {
+        fprintf(qLog, "startTime,frameQSize,drstatusQSize\n");
+        usedforQlog = 0;
+    }
+    fprintf(qLog, "%lf,%d,%d\n", startmsec, frameQSize, drQSize);
+}
+
+void logMsg(char *name, int num, double startmsec, int frameQSize, int drQSize)
 {
     struct timeval  tv;
     gettimeofday(&tv, NULL);
@@ -116,26 +131,39 @@ void logMsg(char *name, int num)
 
 
     if(used!=0){
-        fprintf(fp,"sec,usec,name,completedFECBlockCount\n");
+        fprintf(fp,"sec,usec,name,completedFECBlockCount,startTime,frameQSize,drstatusQSize\n");
         used-=1;
     }
 
-    fprintf(fp,"%ld,%ld,%s,%d\n", tv.tv_sec, tv.tv_usec, name, num);
+    if (usedforQlog != 0) {
+        fprintf(qLog, "startTime,frameQSize,drstatusQSize\n");
+        usedforQlog = 0;
+    }
+
+    fprintf(fp,"%ld,%ld,%s,%d,%lf,%d,%d\n", tv.tv_sec, tv.tv_usec, name, num, startmsec, frameQSize, drQSize);
 //    fclose(fp);
+
+    if (num == 99999) {
+        fprintf(qLog, "%lf,%d,%d\n", startmsec, frameQSize, drQSize);
+    }
 }
 
 PLT_THREAD bufferThread;
+int buffer;
 
 // Initialize the video stream
 void initializeVideoStream(void) {
+
     initializeVideoDepacketizer(StreamConfig.packetSize);
     RtpvInitializeQueue(&rtpQueue);
     receivedDataFromPeer = false;
     firstDataTimeMs = 0;
     receivedFullFrame = false;
 
-    //int err;
-    //err = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
+    Limelog("Before create thread call playoutBuffer");
+
+    buffer = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
+    Limelog("After create thread call playoutBuffer");
 }
 
 // Clean up the video stream
@@ -165,7 +193,6 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
-int called = 0;
 //static Queue *q;
 
 // TEST FUNCTION HELLO WORLD
@@ -189,9 +216,7 @@ static void TestHello() {
 }
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
-    /*
-     * Adding logMsg here makes the streaming look glitchy
-     */
+
 
     if (called == 0) {
         openFile();
@@ -199,7 +224,7 @@ static void VideoReceiveThreadProc(void* context) {
     }
 
     char name[] = "VideoReceiveThreadProc";
-    logMsg(name, NULL);
+    logMsg(name, NULL, .0, NULL, NULL);
 
 
     int err;

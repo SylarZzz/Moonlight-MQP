@@ -18,6 +18,7 @@ static PLT_THREAD testQMain;
 static PLT_THREAD testQSecond;
 static PLT_MUTEX qMainMutex;
 static PLT_MUTEX qSecondMutex;
+static PLT_MUTEX mutex;
 static VIDEO_FRAME_HANDLE frameHandle;
 static int drstatusHandle;
 
@@ -351,7 +352,7 @@ void playoutBufferMain() {
         usedforQlog = 0;
     }
     */
-    static PLT_MUTEX mutex;
+
     PltCreateMutex(&mutex);
     int frameQSize, drstatusQSize;
 
@@ -361,13 +362,19 @@ void playoutBufferMain() {
         double startMillsec = (startT.tv_sec) * 1000 + (startT.tv_usec) / 1000 ;
 
         PltLockMutex(&mutex);
-        Limelog("Dequeuing");
-        dequeue(frameQ);
-        dequeue(drstatusQ);
 
-        Limelog("Dequeued");
+        if (frameQSize > 10) {
+            Limelog("Dequeuing");
+            dequeue(frameQ);
+            dequeue(drstatusQ);
+            Limelog("Dequeued");
+        } else {
+            Limelog("Did not dequeue");
+        }
+
         frameQSize = frameQ->size;
         drstatusQSize = drstatusQ->size;
+        Limelog("Frame Q size = %d, drstatus Q size = %d", frameQSize, drstatusQSize);
 
         // 99999 tells logMsg we want to log info about queue
         logMsg("playoutBufferMain", 99999, startMillsec, frameQSize, drstatusQSize);
@@ -378,7 +385,12 @@ void playoutBufferMain() {
         double endMillsec = (endT.tv_sec) * 1000 + (endT.tv_usec) / 1000 ;
         double ellapsedMilli = endMillsec - startMillsec;
         Limelog("Going to sleep");
-        Sleep(targetTime - ellapsedMilli);
+        double diff = targetTime - ellapsedMilli;
+        if (diff >= 0) {
+            Sleep(diff);
+            Limelog("targetTime - ellapsedMilli(%lf) >= 0\n", ellapsedMilli);
+            Limelog("Slept for %lf\n ms", diff);
+        }
     }
 
     PltDeleteMutex(&mutex);

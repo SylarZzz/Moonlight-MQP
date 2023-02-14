@@ -153,6 +153,10 @@ int buffer;
 
 // Initialize the video stream
 void initializeVideoStream(void) {
+    if (called == 0) {
+        openFile();
+        called = 1;
+    }
 
     initializeVideoDepacketizer(StreamConfig.packetSize);
     RtpvInitializeQueue(&rtpQueue);
@@ -217,12 +221,12 @@ static void TestHello() {
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
 
-
+    /*
     if (called == 0) {
         openFile();
         called = 1;
     }
-
+    */
     char name[] = "VideoReceiveThreadProc";
     logMsg(name, NULL, .0, NULL, NULL);
 

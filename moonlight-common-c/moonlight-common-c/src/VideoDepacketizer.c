@@ -21,6 +21,7 @@ static PLT_MUTEX qSecondMutex;
 static PLT_MUTEX mutex;
 static VIDEO_FRAME_HANDLE frameHandle;
 static int drstatusHandle;
+static int bufferSize = 10;
 
 struct timezone
 {
@@ -331,6 +332,8 @@ static void testDeQ() {
 }
 
 int createdQ = 0;
+static bool inFILL = false;
+static bool inPLAY = false;
 void playoutBufferMain() {
     Limelog("In playoutBufferMain");
 
@@ -341,17 +344,7 @@ void playoutBufferMain() {
     }
     struct timeval startT;
     struct timeval endT;
-    /*
-    if (opened == 0) {
-        openQFile();
-        opened = 1;
-    }
 
-    if (usedforQlog != 0) {
-        fprintf(qLog, "startTime,frameQSize,drstatusQSize\n");
-        usedforQlog = 0;
-    }
-    */
 
     PltCreateMutex(&mutex);
     int frameQSize, drstatusQSize;
@@ -363,13 +356,27 @@ void playoutBufferMain() {
 
         PltLockMutex(&mutex);
 
-        if (frameQSize > 10) {
+        // Condition of switching between PLAY and FILL state will change
+        // Right now it is streaming as long as the q isn't empty
+        if (frameQSize > 0) {
+            inPLAY = true;
+            inFILL = false;
+            Limelog("In PLAY state.");
+        } else {
+            inFILL = true;
+            inPLAY = false;
+            Limelog("In FILL state.");
+        }
+
+        //if (frameQSize > 0 && inPLAY && !inFILL) {
+        if (inPLAY) {
             Limelog("Dequeuing");
             dequeue(frameQ);
             dequeue(drstatusQ);
             Limelog("Dequeued");
-        } else {
-            Limelog("Did not dequeue");
+        } else if (inFILL) {
+
+            Limelog("Did not dequeue because q size = %d", frameQSize);
         }
 
         frameQSize = frameQ->size;
@@ -397,6 +404,7 @@ void playoutBufferMain() {
     //fclose(fp);
 }
 
+
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     PQUEUED_DECODE_UNIT qdu = handle;
@@ -412,6 +420,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
 
     enqueue(frameQ, frameHandle);
     enqueue(drstatusQ, drstatusHandle);
+
     //dequeue(frameQ);
     //dequeue(drstatusQ);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;

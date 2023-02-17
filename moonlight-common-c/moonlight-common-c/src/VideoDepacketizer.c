@@ -9,6 +9,8 @@
 
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
+enum buffer_states {FILL, PLAY};
+
 FILE *file;
 int used1 = 1;
 int called1 = 0;
@@ -337,6 +339,8 @@ static bool inPLAY = false;
 void playoutBufferMain() {
     Limelog("In playoutBufferMain");
 
+    enum buffer_states state;
+
     if (createdQ == 0) {
         frameQ = createQueue();
         drstatusQ = createQueue();
@@ -358,23 +362,22 @@ void playoutBufferMain() {
 
         // Condition of switching between PLAY and FILL state will change
         // Right now it is streaming as long as the q isn't empty
-        if (frameQSize > 0) {
-            inPLAY = true;
-            inFILL = false;
+        if (frameQSize == 10) {
+            state = PLAY;
             Limelog("In PLAY state.");
-        } else {
-            inFILL = true;
-            inPLAY = false;
+        } else if (frameQSize <= 0) {
+            state = FILL;
             Limelog("In FILL state.");
         }
 
         //if (frameQSize > 0 && inPLAY && !inFILL) {
-        if (inPLAY) {
+        if (state == PLAY) {
             Limelog("Dequeuing");
             dequeue(frameQ);
             dequeue(drstatusQ);
+            Limelog("Q size = %d", frameQSize);
             Limelog("Dequeued");
-        } else if (inFILL) {
+        } else if (state == FILL) {
 
             Limelog("Did not dequeue because q size = %d", frameQSize);
         }
@@ -386,6 +389,22 @@ void playoutBufferMain() {
         // 99999 tells logMsg we want to log info about queue
         logMsg("playoutBufferMain", 99999, startMillsec, frameQSize, drstatusQSize);
         PltUnlockMutex(&mutex);
+
+        /*
+         *  TODO:
+         *
+         *      #define DO_SPLIT
+         *
+         *      #ifdef DO_SPLIT
+         *          // ode here to split
+         *      #endif
+         *
+         *      OR
+         *
+         *      #ifndef DO_SPLIT
+         *          // code
+         *      #endif
+         */
 
         gettimeofday(&endT, NULL);
         time_t ltimeEnd;

@@ -333,11 +333,26 @@ static void testDeQ() {
 //    PltDeleteMutex(&qSecondMutex);
 }
 
+FILE *ql;
+int usedforQl = 1;
+int openedQl = 0;
+
+void openQl() {
+    ql = fopen("qLog.csv","w+");
+
+}
+
 int createdQ = 0;
 static bool inFILL = false;
 static bool inPLAY = false;
-void playoutBufferMain() {
+int playoutBufferMain() {
+    openQl();
     Limelog("In playoutBufferMain");
+
+    if (usedforQl != 0) {
+        fprintf(ql, "state,startTime,frameQSize,drstatusQSize\n");
+        usedforQl = 0;
+    }
 
     enum buffer_states state;
 
@@ -370,41 +385,30 @@ void playoutBufferMain() {
             Limelog("In FILL state.");
         }
 
-        //if (frameQSize > 0 && inPLAY && !inFILL) {
         if (state == PLAY) {
             Limelog("Dequeuing");
             dequeue(frameQ);
             dequeue(drstatusQ);
             Limelog("Q size = %d", frameQSize);
             Limelog("Dequeued");
+            fprintf(ql, "PLAY,%lf,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
         } else if (state == FILL) {
-
             Limelog("Did not dequeue because q size = %d", frameQSize);
+            fprintf(ql, "FILL,%lf,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
         }
 
         frameQSize = frameQ->size;
         drstatusQSize = drstatusQ->size;
         Limelog("Frame Q size = %d, drstatus Q size = %d", frameQSize, drstatusQSize);
-
-        // 99999 tells logMsg we want to log info about queue
-        logMsg("playoutBufferMain", 99999, startMillsec, frameQSize, drstatusQSize);
+        fprintf(ql, "OUTSIDE,%lf,%d,%d\n", startMillsec, frameQSize, drstatusQSize);
         PltUnlockMutex(&mutex);
 
-        /*
-         *  TODO:
-         *
-         *      #define DO_SPLIT
-         *
-         *      #ifdef DO_SPLIT
-         *          // ode here to split
-         *      #endif
-         *
-         *      OR
-         *
-         *      #ifndef DO_SPLIT
-         *          // code
-         *      #endif
-         */
+//#define DO_SPLIT
+
+#ifdef DO_SPLIT
+        Limelog("In DO_SPLIT.");
+        return 0;
+#endif
 
         gettimeofday(&endT, NULL);
         time_t ltimeEnd;
@@ -421,6 +425,8 @@ void playoutBufferMain() {
 
     PltDeleteMutex(&mutex);
     //fclose(fp);
+
+    return 0;
 }
 
 
@@ -430,18 +436,12 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     int err;
     frameHandle = handle;
     drstatusHandle = drStatus;
-    //frameQ = createQueue();
-    //drstatusQ = createQueue();
     PLENTRY_INTERNAL lastEntry;
 
-//    err = PltCreateThread("testQSecondTHREAD", testDeQ, NULL, &testQSecond);
-//    err = PltCreateThread("testQMainTHREAD", testEnQ, NULL, &testQMain);
 
     enqueue(frameQ, frameHandle);
     enqueue(drstatusQ, drstatusHandle);
 
-    //dequeue(frameQ);
-    //dequeue(drstatusQ);
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
 
     char name[] = "LiCompleteVideoFrame";

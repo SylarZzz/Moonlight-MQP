@@ -108,12 +108,12 @@ void openFile() {
 
 }
 
-void logQMsg(double startmsec, int frameQSize, int drQSize) {
+void logQMsg(char state[], double startmsec, int frameQSize, int drQSize) {
     if (usedforQlog != 0) {
-        fprintf(qLog, "startTime,frameQSize,drstatusQSize\n");
+        fprintf(qLog, "state,startTime,frameQSize,drstatusQSize\n");
         usedforQlog = 0;
     }
-    fprintf(qLog, "%lf,%d,%d\n", startmsec, frameQSize, drQSize);
+    fprintf(qLog, "%s,%lf,%d,%d\n", state, startmsec, frameQSize, drQSize);
 }
 
 void logMsg(char *name, int num, double startmsec, int frameQSize, int drQSize)
@@ -153,10 +153,12 @@ int buffer;
 
 // Initialize the video stream
 void initializeVideoStream(void) {
+
     if (called == 0) {
         openFile();
         called = 1;
     }
+
 
     initializeVideoDepacketizer(StreamConfig.packetSize);
     RtpvInitializeQueue(&rtpQueue);
@@ -221,12 +223,12 @@ static void TestHello() {
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
 
-    /*
+
     if (called == 0) {
         openFile();
         called = 1;
     }
-    */
+
     char name[] = "VideoReceiveThreadProc";
     logMsg(name, NULL, .0, NULL, NULL);
 

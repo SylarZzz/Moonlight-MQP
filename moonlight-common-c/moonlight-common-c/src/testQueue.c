@@ -50,7 +50,7 @@ void dequeue(Queue *queue) {
     }
 }
 
-int front(Queue *queue) {
+void * front(Queue *queue) {
     if (isEmpty(queue)) {
         Limelog("Queue is empty.\n");
         return -1;
@@ -59,7 +59,7 @@ int front(Queue *queue) {
     }
 }
 
-int back(Queue *queue) {
+void * back(Queue *queue) {
     if (isEmpty(queue)) {
         Limelog("Queue is empty.\n");
         return -1;

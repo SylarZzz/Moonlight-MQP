@@ -18,6 +18,6 @@ Queue *createQueue();
 bool isEmpty(Queue *queue);
 void enqueue(Queue *queue, void * data);
 void dequeue(Queue *queue);
-int front(Queue *queue);
-int back(Queue *queue);
+void * front(Queue *queue);
+void * back(Queue *queue);
 //void queueTest();

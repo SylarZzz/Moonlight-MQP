@@ -360,6 +360,8 @@ int playoutBufferMain() {
         } else if (state == FILL) {
             Limelog("In FILL: Did not dequeue because q size = %d", frameQSize);
             fprintf(ql, "FILL,%lf,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
+
+
         }
 
         frameQSize = frameQ->size;
@@ -371,32 +373,33 @@ int playoutBufferMain() {
 
         // sylar: Connecting dequeued item to the rest of the program
 
-        if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
-            notifyKeyFrameReceived();
-        }
+        if (state == PLAY) {
+            if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
+                notifyKeyFrameReceived();
+            }
 
-        if (drStatus == DR_NEED_IDR) {
-            Limelog("Requesting IDR frame on behalf of DR\n");
-            requestDecoderRefresh();
-        }
-        else if (drStatus == DR_OK && qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
-            // Remember that the IDR frame was processed. We can now use
-            // reference frame invalidation.
-            idrFrameProcessed = true;
-        }
+            if (drStatus == DR_NEED_IDR) {
+                Limelog("Requesting IDR frame on behalf of DR\n");
+                requestDecoderRefresh();
+            }
+            else if (drStatus == DR_OK && qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
+                // Remember that the IDR frame was processed. We can now use
+                // reference frame invalidation.
+                idrFrameProcessed = true;
+            }
 
-        while (qdu->decodeUnit.bufferList != NULL) {
-            lastEntry = (PLENTRY_INTERNAL)qdu->decodeUnit.bufferList;
-            qdu->decodeUnit.bufferList = lastEntry->entry.next;
-            free(lastEntry->allocPtr);
+            while (qdu->decodeUnit.bufferList != NULL) {
+                lastEntry = (PLENTRY_INTERNAL)qdu->decodeUnit.bufferList;
+                qdu->decodeUnit.bufferList = lastEntry->entry.next;
+                free(lastEntry->allocPtr);
+            }
+
+            // We will have stack-allocated entries iff we have a direct-submit decoder
+            if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
+                free(qdu);
+            }
+
         }
-
-        // We will have stack-allocated entries iff we have a direct-submit decoder
-        if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
-            free(qdu);
-        }
-
-
         struct timeval startSleep;
         struct timeval endSleep;
 
@@ -433,6 +436,7 @@ int playoutBufferMain() {
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
+    Limelog("In LiCompleteVideoFrame");
     PQUEUED_DECODE_UNIT qdu = handle;
     int err;
     frameHandle = handle;

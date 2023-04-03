@@ -9,13 +9,16 @@
 
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
-enum buffer_states {FILL, PLAY};
 
 FILE *file;
-int used1 = 1;
-int called1 = 0;
+FILE *fp;
+
+// Buffer & Queue variables
+enum buffer_states {FILL, PLAY};
 static Queue *frameQ;
 static Queue *drstatusQ;
+int createdQ = 0;
+int frameQSize, drstatusQSize;
 static PLT_THREAD testQMain;
 static PLT_THREAD testQSecond;
 static PLT_MUTEX qMainMutex;
@@ -25,6 +28,11 @@ static VIDEO_FRAME_HANDLE frameHandle;
 static int drstatusHandle;
 static int bufferSize = 10;
 
+// Catch up time for dequeuing thread
+long catchUp = 0;
+
+
+
 struct timezone
 {
   int  tz_minuteswest; /* minutes W of Greenwich */
@@ -32,38 +40,6 @@ struct timezone
 };
 
 
-/*
-void timer(){
-
-    gettimeofday(&start,NULL);
-
-    for(int i=0;i<5;i++){
-        waitFor(1);
-    }
-    gettimeofday(&finish,NULL);
-    int count=finish.tv_sec-start.tv_sec;
-    printf("%s,%ld\n","timer test",count);
-}
-*/
-
-void openFileForHandle() {
-    file = fopen("trackHandle.csv","w+");
-}
-
-void trackHandle(int frameNum, int length)
-{
-    struct timeval  tv;
-    gettimeofday(&tv, NULL);
-
-    time_t ltime;
-
-    if(used1!=0){
-        fprintf(file,"sec,usec,frameNumber,fullLength\n");
-        used1-=1;
-    }
-
-    fprintf(file,"%ld,%ld,%d,%d\n", tv.tv_sec, tv.tv_usec, frameNum, length);
-}
 
 // Uncomment to test 3 byte Annex B start sequences with GFE
 //#define FORCE_3_BYTE_START_SEQUENCES
@@ -117,7 +93,6 @@ typedef struct _LENTRY_INTERNAL {
 #define HEVC_NAL_TYPE_AUD 35
 #define HEVC_NAL_TYPE_SEI 39
 
-FILE *fp;
 
 // Init
 void initializeVideoDepacketizer(int pktSize) {
@@ -294,16 +269,26 @@ int usedforQl = 1;
 int openedQl = 0;
 
 void openQl() {
-    ql = fopen("qLog.csv","w+");
+    ql = fopen("sylarQLog.csv","w+");
 
 }
 
-int createdQ = 0;
+struct timeval waitForBuffer, streamStart;
+static long startStreamTime;
+int gettime = 0;
 
-long catchUp = 0;
-int frameQSize, drstatusQSize;
 
 int playoutBufferMain() {
+
+    gettimeofday(&streamStart, NULL);
+    time_t startStream;
+    long currTime = (streamStart.tv_sec) * 1000 + (streamStart.tv_usec) / 1000;
+    if (gettime == 0) {
+        startStreamTime = currTime;
+        gettime = 1;
+    }
+
+
     openQl();
     Limelog("In playoutBufferMain");
 
@@ -314,7 +299,7 @@ int playoutBufferMain() {
 
     enum buffer_states state;
 
-    // variables for connecting dequeued item with the rest of the program
+    // sylar: variables for connecting dequeued item with the rest of the program
     PQUEUED_DECODE_UNIT qdu;
     int drStatus;
     PLENTRY_INTERNAL lastEntry;
@@ -339,8 +324,8 @@ int playoutBufferMain() {
 
         PltLockMutex(&mutex);
 
-        // Condition of switching between PLAY and FILL state will change
-        // Right now it is streaming as long as the q isn't empty
+        // sylar: Condition of switching between PLAY and FILL state will change
+        //        Right now it is streaming as long as the q isn't empty
         if (frameQSize >= 10) {
             state = PLAY;
             Limelog("In PLAY state.");
@@ -428,11 +413,18 @@ int playoutBufferMain() {
     }
 
     PltDeleteMutex(&mutex);
-    //fclose(fp);
 
     return 0;
 }
 
+// sylar: variables for enqueue rate
+bool hasAQueue = false;
+struct timeval startEnQRate;
+long EnQMilli;
+static Queue *enQRateQ;
+long interframeRates[10];
+static double enqueueRate = 0;
+static int counter = 0;
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
@@ -443,24 +435,52 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     drstatusHandle = drStatus;
     PLENTRY_INTERNAL lastEntry;
 
+    // start a timer for measuring enqueue rate
+    if (!hasAQueue) {
+        enQRateQ = createQueue();
+        hasAQueue = true;
+    }
 
     enqueue(frameQ, frameHandle);
     enqueue(drstatusQ, drstatusHandle);
     Limelog("Enqueued");
+    gettimeofday(&startEnQRate, NULL);
+    time_t lEnQtime;
+    long enQMillsec = (startEnQRate.tv_sec) * 1000 + (startEnQRate.tv_usec) / 1000 ;
+    //enqueue(enQRateQ, enQMillsec);
+
+    Limelog("Interframe Time: %ld", enQMillsec);
+
+
+
+    // filling up the interframe rates array for the first time
+    if (counter < 9) {
+        interframeRates[counter] = enQMillsec;
+        Limelog("Counter = %d, framerate = %ld", counter, enQMillsec);
+        counter++;
+    }
+    // array filled, start calculating the enqueue rate
+    else if (counter == 9) {
+        interframeRates[counter] = enQMillsec;
+        Limelog("Counter = %d, framerate = %ld", counter, enQMillsec);
+        int sum;
+        // start computing average enqueue rate
+        for (int i = 0; i < 10; i++) {
+            sum += interframeRates[i];
+        }
+        enqueueRate = sum / 10;
+
+        // shifting the average window right by 1
+        for (int i = 0; i < 9; i++) {
+            interframeRates[i] = interframeRates[i + 1];
+        }
+        Limelog("Average Enqueue Rate: %lf", enqueueRate);
+    }
 
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
 
     char name[] = "LiCompleteVideoFrame";
     logMsg(name, NULL, .0, NULL, NULL);
-
-    /*
-    if (called1 == 0) {
-        openFileForHandle();
-        called1 = 1;
-    }
-    // trackHandle is a log file function
-    trackHandle(qdu->decodeUnit.frameNumber, qdu->decodeUnit.fullLength);
-    */
 
 #define DO_SPLIT
 

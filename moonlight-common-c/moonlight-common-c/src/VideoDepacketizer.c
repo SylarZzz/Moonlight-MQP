@@ -449,14 +449,14 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     uint64_t  enQMillsec = (startEnQRate.tv_sec * (uint64_t)1000) + (startEnQRate.tv_usec / 1000);
     //enqueue(enQRateQ, enQMillsec);
 
-    Limelog("Interframe Time: %ld", enQMillsec);
+    Limelog("Interframe Time: %llu", enQMillsec);
 
 
 
     // filling up the interframe rates array for the first time
     if (counter < 9) {
         interframeRates[counter] = enQMillsec;
-        Limelog("Counter = %d, framerate = %ld", counter, enQMillsec);
+        Limelog("Counter = %d, framerate = %llu", counter, enQMillsec);
         counter++;
     }
     // array filled, start calculating the enqueue rate

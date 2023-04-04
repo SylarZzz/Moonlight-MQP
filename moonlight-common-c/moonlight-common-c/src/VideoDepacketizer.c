@@ -463,7 +463,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     else if (counter == 9) {
         interframeRates[counter] = enQMillsec;
         Limelog("Counter = %d, framerate = %llu", counter, enQMillsec);
-        uint64_t sum;
+        uint64_t sum = 0;
         // start computing average enqueue rate
         for (int i = 0; i < 10; i++) {
             sum += interframeRates[i];

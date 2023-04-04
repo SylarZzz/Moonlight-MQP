@@ -422,8 +422,8 @@ bool hasAQueue = false;
 struct timeval startEnQRate;
 long EnQMilli;
 static Queue *enQRateQ;
-long interframeRates[10];
-static double enqueueRate = 0;
+uint64_t interframeRates[10];
+static long double avgEnQRate = 0;
 static int counter = 0;
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
@@ -446,7 +446,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     Limelog("Enqueued");
     gettimeofday(&startEnQRate, NULL);
     time_t lEnQtime;
-    long enQMillsec = (startEnQRate.tv_sec) * 1000 + (startEnQRate.tv_usec) / 1000 ;
+    uint64_t  enQMillsec = (startEnQRate.tv_sec * (uint64_t)1000) + (startEnQRate.tv_usec / 1000);
     //enqueue(enQRateQ, enQMillsec);
 
     Limelog("Interframe Time: %ld", enQMillsec);
@@ -462,19 +462,20 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     // array filled, start calculating the enqueue rate
     else if (counter == 9) {
         interframeRates[counter] = enQMillsec;
-        Limelog("Counter = %d, framerate = %ld", counter, enQMillsec);
-        int sum;
+        Limelog("Counter = %d, framerate = %llu", counter, enQMillsec);
+        uint64_t sum;
         // start computing average enqueue rate
         for (int i = 0; i < 10; i++) {
             sum += interframeRates[i];
         }
-        enqueueRate = sum / 10;
+        Limelog("Sum = %llu", sum);
+        avgEnQRate = sum / (uint64_t)10;
 
         // shifting the average window right by 1
         for (int i = 0; i < 9; i++) {
             interframeRates[i] = interframeRates[i + 1];
         }
-        Limelog("Average Enqueue Rate: %lf", enqueueRate);
+        Limelog("Average Enqueue Rate: %lf", avgEnQRate);
     }
 
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;

@@ -417,21 +417,15 @@ int playoutBufferMain() {
     return 0;
 }
 
-// sylar: variables for enqueue rate
-bool hasAQueue = false;
-struct timeval startEnQRate;
-long EnQMilli;
-static Queue *enQRateQ;
+// sylar: variables and logs for Li..() call rate
 uint64_t interframeRates[10];
 static long double avgEnQRate = 0;
 static int counter = 0;
-
-// Time logs for LiCompleteVideoFrame
 uint64_t  elaspedT = 0;
 uint64_t  newT = 0;
 uint64_t  oldT = 0;
 struct timeval newTimer;
-FILE *enQRateF;
+FILE *enQRateFile;
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {

@@ -31,21 +31,6 @@ static int bufferSize = 10;
 // Catch up time for dequeuing thread
 long catchUp = 0;
 
-// Time logs for LiCompleteVideoFrame
-uint64_t  elaspedT = 0;
-uint64_t  newT = 0;
-uint64_t  oldT = 0;
-struct timeval newTimer;
-FILE *enQRateF;
-
-// sylar: variables for enqueue rate
-bool hasAQueue = false;
-struct timeval startEnQRate;
-long EnQMilli;
-static Queue *enQRateQ;
-uint64_t interframeRates[10];
-static long double avgEnQRate = 0;
-static int counter = 0;
 
 
 struct timezone
@@ -127,7 +112,7 @@ void initializeVideoDepacketizer(int pktSize) {
     strictIdrFrameWait = !isReferenceFrameInvalidationEnabled();
 //    PltCreateMutex(&qSecondMutex);
     PltCreateMutex(&qMainMutex);
-    fp = fopen("timelog.csv","w+");
+    //fp = fopen("timelog.csv","w+");
 }
 
 // Free the NAL chain
@@ -189,39 +174,6 @@ static void freeDecodeUnitList(PLINKED_BLOCKING_QUEUE_ENTRY entry) {
 
         // Complete this with a failure status
         LiCompleteVideoFrame(entry->data, DR_CLEANUP);
-
-        // sylar: log LiCompleteVideoFrame() called time
-        gettimeofday(&newTimer);
-        time_t lnewT;
-        newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
-        elaspedT = newT - oldT;
-        oldT = newT;
-        // TODO: put the elaspedT into array
-
-        // filling up the interframe rates array for the first time
-        if (counter < 9) {
-            interframeRates[counter] = elaspedT;
-            Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
-            counter++;
-        }
-        // array filled, start calculating the enqueue rate
-        else if (counter == 9) {
-            interframeRates[counter] = elaspedT;
-            Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
-            uint64_t sum = 0;
-            // start computing average enqueue rate
-            for (int i = 0; i < 10; i++) {
-                sum += interframeRates[i];
-            }
-            Limelog("Sum = %llu", sum);
-            avgEnQRate = sum / (uint64_t)10;
-
-            // shifting the average window right by 1
-            for (int i = 0; i < 9; i++) {
-                interframeRates[i] = interframeRates[i + 1];
-            }
-            Limelog("Average Enqueue Rate: %lf", avgEnQRate);
-        }
 
         entry = nextEntry;
     }
@@ -314,7 +266,7 @@ void LiWakeWaitForVideoFrame(void) {
 
 FILE *ql;
 int usedforQl = 1;
-//int openedQl = 0;
+int openedQl = 0;
 
 void openQl() {
     ql = fopen("sylarQLog.csv","w+");
@@ -374,7 +326,7 @@ int playoutBufferMain() {
 
         // sylar: Condition of switching between PLAY and FILL state will change
         //        Right now it is streaming as long as the q isn't empty
-        if (frameQSize >= 10) {
+        if (frameQSize >= 25) {
             state = PLAY;
             Limelog("In PLAY state.");
         } else if (frameQSize <= 0) {
@@ -465,9 +417,35 @@ int playoutBufferMain() {
     return 0;
 }
 
+// sylar: variables and logs for Li..() call rate
+uint64_t interframeRates[10];
+static long double avgEnQRate = 0;
+static int counter = 0;
+uint64_t elaspedT = 0;
+uint64_t newT = 0;
+uint64_t oldT = 0;
+static uint64_t initialT = 0;
+uint64_t eTimeForLog = 0;
+bool gotInitTime = false;
+struct timeval newTimer;
+FILE *enQRateFile;
+bool hasFirstLine = false;
+
+void openenQl() {
+    enQRateFile = fopen("sylarAvgRateLog.csv","w+");
+}
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
+
+    /*
+    openenQl();
+
+    if (!hasFirstLine) {
+        fprintf(enQRateFile, "Time,AvgEnQRate\n", eTimeForLog, avgEnQRate);
+        hasFirstLine = true;
+    }
+    */
     Limelog("In LiCompleteVideoFrame");
     PQUEUED_DECODE_UNIT qdu = handle;
     int err;
@@ -475,38 +453,31 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     drstatusHandle = drStatus;
     PLENTRY_INTERNAL lastEntry;
 
-    // start a timer for measuring enqueue rate
-    if (!hasAQueue) {
-        enQRateQ = createQueue();
-        hasAQueue = true;
+
+    // sylar: log LiCompleteVideoFrame() called time
+    gettimeofday(&newTimer);
+    time_t lnewT;
+    if (!gotInitTime) {
+        initialT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
+        gotInitTime = true;
     }
+    newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
+    elaspedT = newT - oldT;
+    eTimeForLog = newT - initialT;
+    oldT = newT;
 
-    // enqueue
-    PltLockMutex(&mutex);
-    enqueue(frameQ, frameHandle);
-    enqueue(drstatusQ, drstatusHandle);
-    PltUnlockMutex(&mutex);
-
-    Limelog("Enqueued");
-    gettimeofday(&startEnQRate, NULL);
-    time_t lEnQtime;
-    uint64_t  enQMillsec = (startEnQRate.tv_sec * (uint64_t)1000) + (startEnQRate.tv_usec / 1000);
-    //enqueue(enQRateQ, enQMillsec);
-
-    /*
-
-    Limelog("Interframe Time: %llu", enQMillsec);
+    Limelog("Interframe Time: %llu", elaspedT);
 
     // filling up the interframe rates array for the first time
     if (counter < 9) {
-        interframeRates[counter] = enQMillsec;
-        Limelog("Counter = %d, framerate = %llu", counter, enQMillsec);
+        interframeRates[counter] = elaspedT;
+        Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
         counter++;
     }
     // array filled, start calculating the enqueue rate
     else if (counter == 9) {
-        interframeRates[counter] = enQMillsec;
-        Limelog("Counter = %d, framerate = %llu", counter, enQMillsec);
+        interframeRates[counter] = elaspedT;
+        Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
         uint64_t sum = 0;
         // start computing average enqueue rate
         for (int i = 0; i < 10; i++) {
@@ -519,10 +490,19 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         for (int i = 0; i < 9; i++) {
             interframeRates[i] = interframeRates[i + 1];
         }
-        Limelog("Average Enqueue Rate: %lf", avgEnQRate);
+        Limelog("Time: %llu, Average Enqueue Rate: %lf", eTimeForLog, avgEnQRate);
     }
 
-    */
+
+    //fprintf(enQRateFile, "%llu,%lf\n", eTimeForLog, avgEnQRate);
+
+    PltLockMutex(&mutex);
+    enqueue(frameQ, frameHandle);
+    enqueue(drstatusQ, drstatusHandle);
+    PltUnlockMutex(&mutex);
+    Limelog("Enqueued");
+
+
 
     PQUEUED_DECODE_UNIT qduHandle = frameHandle;
 
@@ -687,16 +667,6 @@ static bool isIdrFrameStart(PBUFFER_DESC buffer) {
     }
 }
 
-bool usedforAvg = false;
-void logAvgEnQ (uint64_t avgEnq) {
-    enQRateF = fopen("enqRateLog.csv", "w+");
-    if (!usedforAvg) {
-        fprintf(ql, "time,avgEnQRate\n");
-        usedforAvg = true;
-    }
-}
-
-
 // Reassemble the frame with the given frame number
 static void reassembleFrame(int frameNumber) {
     char name[] = "reassembleFrame";
@@ -761,39 +731,6 @@ static void reassembleFrame(int frameNumber) {
             else {
                 // Submit the frame to the decoder
                 LiCompleteVideoFrame(qdu, VideoCallbacks.submitDecodeUnit(&qdu->decodeUnit));
-
-                // sylar: log LiCompleteVideoFrame() called time
-                gettimeofday(&newTimer);
-                time_t lnewT;
-                newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
-                elaspedT = newT - oldT;
-                oldT = newT;
-                // TODO: put the elaspedT into array
-
-                // filling up the interframe rates array for the first time
-                if (counter < 9) {
-                    interframeRates[counter] = elaspedT;
-                    Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
-                    counter++;
-                }
-                // array filled, start calculating the enqueue rate
-                else if (counter == 9) {
-                    interframeRates[counter] = elaspedT;
-                    Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
-                    uint64_t sum = 0;
-                    // start computing average enqueue rate
-                    for (int i = 0; i < 10; i++) {
-                        sum += interframeRates[i];
-                    }
-                    Limelog("Sum = %llu", sum);
-                    avgEnQRate = sum / (uint64_t)10;
-
-                    // shifting the average window right by 1
-                    for (int i = 0; i < 9; i++) {
-                        interframeRates[i] = interframeRates[i + 1];
-                    }
-                    Limelog("Average Enqueue Rate: %lf", avgEnQRate);
-                }
             }
 
             // Notify the control connection
@@ -969,16 +906,16 @@ static void processRtpPayloadSlow(PBUFFER_DESC currentPos, PLENTRY_INTERNAL* exi
 void requestDecoderRefresh(void) {
     // Wait for the next IDR frame
     waitingForIdrFrame = true;
-    
+
     // Flush the decode unit queue
     freeDecodeUnitList(LbqFlushQueueItems(&decodeUnitQueue));
-    
+
     // Request the receive thread drop its state
     // on the next call. We can't do it here because
     // it may be trying to queue DUs and we'll nuke
     // the state out from under it.
     dropStatePending = true;
-    
+
     // Request the IDR frame
     LiRequestIdrFrame();
 }
@@ -1025,7 +962,7 @@ static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
     LC_ASSERT((flags & ~(FLAG_SOF | FLAG_EOF | FLAG_CONTAINS_PIC_DATA)) == 0);
 
     streamPacketIndex = videoPacket->streamPacketIndex;
-    
+
     // Drop packets from a previously corrupt frame
     if (isBefore32(frameIndex, nextFrameNumber)) {
         return;
@@ -1048,10 +985,10 @@ static void processRtpPayload(PNV_VIDEO_PACKET videoPacket, int length,
         }
         return;
     }
-    
+
     // Verify that we didn't receive an incomplete frame
     LC_ASSERT(firstPacket ^ decodingFrame);
-    
+
     // Check sequencing of this frame to ensure we didn't
     // miss one in between
     if (firstPacket) {

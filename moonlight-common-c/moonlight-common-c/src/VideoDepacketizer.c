@@ -31,6 +31,12 @@ static int bufferSize = 10;
 // Catch up time for dequeuing thread
 long catchUp = 0;
 
+// Time logs for LiCompleteVideoFrame
+uint64_t  elaspedT = 0;
+uint64_t  newT = 0;
+uint64_t  oldT = 0;
+struct timeval newTimer;
+FILE *enQRateF;
 
 
 struct timezone
@@ -266,7 +272,7 @@ void LiWakeWaitForVideoFrame(void) {
 
 FILE *ql;
 int usedforQl = 1;
-int openedQl = 0;
+//int openedQl = 0;
 
 void openQl() {
     ql = fopen("sylarQLog.csv","w+");
@@ -412,7 +418,7 @@ int playoutBufferMain() {
 
     }
 
-    PltDeleteMutex(&mutex);
+    //PltDeleteMutex(&mutex);
 
     return 0;
 }
@@ -441,8 +447,12 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         hasAQueue = true;
     }
 
+    // enqueue
+    PltLockMutex(&mutex);
     enqueue(frameQ, frameHandle);
     enqueue(drstatusQ, drstatusHandle);
+    PltUnlockMutex(&mutex);
+
     Limelog("Enqueued");
     gettimeofday(&startEnQRate, NULL);
     time_t lEnQtime;
@@ -641,6 +651,15 @@ static bool isIdrFrameStart(PBUFFER_DESC buffer) {
     }
 }
 
+void logEnQ (uint64_t elapsedt) {
+    enQRateF = fopen("enqRateLog.csv", "w+");
+    if (usedforQl != 0) {
+        fprintf(ql, "state,startTime,frameQSize,drstatusQSize\n");
+        usedforQl = 0;
+    }
+}
+
+
 // Reassemble the frame with the given frame number
 static void reassembleFrame(int frameNumber) {
     char name[] = "reassembleFrame";
@@ -705,6 +724,14 @@ static void reassembleFrame(int frameNumber) {
             else {
                 // Submit the frame to the decoder
                 LiCompleteVideoFrame(qdu, VideoCallbacks.submitDecodeUnit(&qdu->decodeUnit));
+                // sylar: log LiCompleteVideoFrame() called time
+                gettimeofday(&newTimer);
+                time_t lnewT;
+                newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
+                elaspedT = newT - oldT;
+                oldT = newT;
+                logEnQ(elaspedT);
+                // TODO: log elaspedT
             }
 
             // Notify the control connection

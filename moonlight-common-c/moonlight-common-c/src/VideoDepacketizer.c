@@ -12,6 +12,8 @@
 
 FILE *file;
 FILE *fp;
+FILE *enQRateFile;
+bool hasFirstLine = false;
 
 // Buffer & Queue variables
 enum buffer_states {FILL, PLAY};
@@ -112,7 +114,7 @@ void initializeVideoDepacketizer(int pktSize) {
     strictIdrFrameWait = !isReferenceFrameInvalidationEnabled();
 //    PltCreateMutex(&qSecondMutex);
     PltCreateMutex(&qMainMutex);
-    fp = fopen("timelog.csv","w+");
+    //fp = fopen("timelog.csv","w+");
 }
 
 // Free the NAL chain
@@ -270,7 +272,8 @@ int openedQl = 0;
 
 void openQl() {
     ql = fopen("sylarQLog.csv","w+");
-
+    enQRateFile = fopen("sylarAvgRateLog.csv","w+");
+    fprintf(enQRateFile, "Time,AvgEnQRate\n");
 }
 
 struct timeval waitForBuffer, streamStart;
@@ -326,7 +329,7 @@ int playoutBufferMain() {
 
         // sylar: Condition of switching between PLAY and FILL state will change
         //        Right now it is streaming as long as the q isn't empty
-        if (frameQSize >= 10) {
+        if (frameQSize >= 25) {
             state = PLAY;
             Limelog("In PLAY state.");
         } else if (frameQSize <= 0) {
@@ -392,12 +395,12 @@ int playoutBufferMain() {
         time_t ltimeEnd;
         long endMillsec = (endT.tv_sec) * 1000 + (endT.tv_usec) / 1000 ;
         long ellapsedMilli = endMillsec - startMillsec;
-        Limelog("Going to sleep");
         long diff = targetTime - ellapsedMilli;
         if (diff >= 0) {
             gettimeofday(&startSleep, NULL);
             time_t lstartsleepT;
             long startSleepMs = (startSleep.tv_sec) * 1000 + (startSleep.tv_usec) / 1000 ;
+            Limelog("Going to sleep");
             Sleep(diff - catchUp);
             Limelog("Slept for %ld\n ms", (diff - catchUp));
             gettimeofday(&endSleep, NULL);
@@ -421,14 +424,28 @@ int playoutBufferMain() {
 uint64_t interframeRates[10];
 static long double avgEnQRate = 0;
 static int counter = 0;
-uint64_t  elaspedT = 0;
-uint64_t  newT = 0;
-uint64_t  oldT = 0;
+uint64_t elaspedT = 0;
+uint64_t newT = 0;
+uint64_t oldT = 0;
+static uint64_t initialT = 0;
+uint64_t eTimeForLog = 0;
+bool gotInitTime = false;
 struct timeval newTimer;
-FILE *enQRateFile;
+
+
+void openenQl() {
+    enQRateFile = fopen("sylarAvgRateLog.csv","w+");
+    fprintf(enQRateFile, "Time,AvgEnQRate\n");
+}
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
+
+    if (!hasFirstLine) {
+        //openenQl();
+        hasFirstLine = true;
+    }
+
     Limelog("In LiCompleteVideoFrame");
     PQUEUED_DECODE_UNIT qdu = handle;
     int err;
@@ -440,8 +457,13 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     // sylar: log LiCompleteVideoFrame() called time
     gettimeofday(&newTimer);
     time_t lnewT;
+    if (!gotInitTime) {
+        initialT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
+        gotInitTime = true;
+    }
     newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
     elaspedT = newT - oldT;
+    eTimeForLog = newT - initialT;
     oldT = newT;
 
     Limelog("Interframe Time: %llu", elaspedT);
@@ -468,8 +490,11 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         for (int i = 0; i < 9; i++) {
             interframeRates[i] = interframeRates[i + 1];
         }
-        Limelog("Average Enqueue Rate: %lf", avgEnQRate);
+        Limelog("Time: %llu, Average Enqueue Rate: %lf", eTimeForLog, avgEnQRate);
     }
+
+
+    //fprintf(enQRateFile, "%llu,%lf\n", eTimeForLog, avgEnQRate);
 
     PltLockMutex(&mutex);
     enqueue(frameQ, frameHandle);

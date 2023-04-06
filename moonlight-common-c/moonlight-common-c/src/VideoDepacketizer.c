@@ -33,6 +33,19 @@ static int bufferSize = 10;
 // Catch up time for dequeuing thread
 long catchUp = 0;
 
+// Variables and logs for Li..() call rate
+uint64_t interframeRates[10];
+static long double avgEnQRate = 0;
+static int counter = 0;
+uint64_t elaspedT = 0;
+uint64_t newT = 0;
+uint64_t oldT = 0;
+static uint64_t initialT = 0;
+uint64_t eTimeForLog = 0;
+bool gotInitTime = false;
+bool gotFirstTime = false;
+struct timeval newTimer;
+
 
 
 struct timezone
@@ -323,7 +336,7 @@ int playoutBufferMain() {
     while (1) {
         gettimeofday(&startT, NULL);
         time_t ltimeStart;
-        double startMillsec = (startT.tv_sec) * 1000 + (startT.tv_usec) / 1000 ;
+        uint64_t startMillsec = (startT.tv_sec * (uint64_t) 1000) + (startT.tv_usec / 1000 );
 
         PltLockMutex(&mutex);
 
@@ -391,11 +404,17 @@ int playoutBufferMain() {
         struct timeval startSleep;
         struct timeval endSleep;
 
-        gettimeofday(&endT, NULL);
-        time_t ltimeEnd;
-        long endMillsec = (endT.tv_sec) * 1000 + (endT.tv_usec) / 1000 ;
-        long ellapsedMilli = endMillsec - startMillsec;
-        long diff = targetTime - ellapsedMilli;
+        //gettimeofday(&endT, NULL);
+        gettimeofday(&startT, NULL);
+        //time_t ltimeEnd;
+        uint64_t endMillsec = (startT.tv_sec * (uint64_t) 1000) + (startT.tv_usec / 1000 );
+        uint64_t ellapsedMilli = endMillsec - startMillsec;
+        uint64_t diff = targetTime - ellapsedMilli;
+        uint64_t diff2 = (uint64_t)avgEnQRate - (uint64_t)ellapsedMilli;
+
+        Limelog("avg = %llu, start = %llu, end = %llu, elapsed = %llu", (uint64_t)avgEnQRate, startMillsec, endMillsec, ellapsedMilli);
+        Limelog("diff = %llu, diff2 = %llu", diff, diff2);
+
         if (diff >= 0) {
             gettimeofday(&startSleep, NULL);
             time_t lstartsleepT;
@@ -408,35 +427,23 @@ int playoutBufferMain() {
             long endSleepMs = (endSleep.tv_sec) * 1000 + (endSleep.tv_usec) / 1000 ;
             long slepTime = endSleepMs - startSleepMs;
             catchUp = slepTime - diff;
-            Limelog("targetTime - ellapsedMilli(%ld) >= 0\n", ellapsedMilli);
 
         }
 
 
     }
 
-    //PltDeleteMutex(&mutex);
-
     return 0;
 }
 
-// sylar: variables and logs for Li..() call rate
-uint64_t interframeRates[10];
-static long double avgEnQRate = 0;
-static int counter = 0;
-uint64_t elaspedT = 0;
-uint64_t newT = 0;
-uint64_t oldT = 0;
-static uint64_t initialT = 0;
-uint64_t eTimeForLog = 0;
-bool gotInitTime = false;
-struct timeval newTimer;
 
 
 void openenQl() {
     enQRateFile = fopen("sylarAvgRateLog.csv","w+");
     fprintf(enQRateFile, "Time,AvgEnQRate\n");
 }
+
+
 
 // Cleanup a decode unit by freeing the buffer chain and the holder
 void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
@@ -461,10 +468,20 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         initialT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
         gotInitTime = true;
     }
-    newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
-    elaspedT = newT - oldT;
-    eTimeForLog = newT - initialT;
-    oldT = newT;
+
+
+    // sylar: set the first elapsed time to 0, otherwise the number is massive
+    if (!gotFirstTime) {
+        elaspedT = newT - oldT;
+        eTimeForLog = ((newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000)) - initialT;
+        oldT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
+        gotFirstTime = true;
+    } else if (gotFirstTime) {
+        newT = (newTimer.tv_sec * (uint64_t)1000) + (newTimer.tv_usec / 1000);
+        elaspedT = newT - oldT;
+        eTimeForLog = newT - initialT;
+        oldT = newT;
+    }
 
     Limelog("Interframe Time: %llu", elaspedT);
 
@@ -542,11 +559,6 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
         free(qdu);
     }
-
-
-    //PltCloseThread(&testQSecond);
-    //PltCloseThread(&testQMain);
-
 
 }
 

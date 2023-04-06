@@ -404,30 +404,47 @@ int playoutBufferMain() {
         struct timeval startSleep;
         struct timeval endSleep;
 
-        //gettimeofday(&endT, NULL);
+        gettimeofday(&endT, NULL);
         gettimeofday(&startT, NULL);
-        //time_t ltimeEnd;
-        uint64_t endMillsec = (startT.tv_sec * (uint64_t) 1000) + (startT.tv_usec / 1000 );
+        time_t ltimeEnd;
+        uint64_t endMillsec = (endT.tv_sec * (uint64_t) 1000) + (endT.tv_usec / 1000 );
         uint64_t ellapsedMilli = endMillsec - startMillsec;
-        uint64_t diff = targetTime - ellapsedMilli;
-        uint64_t diff2 = (uint64_t)avgEnQRate - (uint64_t)ellapsedMilli;
+        long diff = targetTime - ellapsedMilli;
+        long diff2 = (uint64_t)avgEnQRate - ellapsedMilli;
 
         Limelog("avg = %llu, start = %llu, end = %llu, elapsed = %llu", (uint64_t)avgEnQRate, startMillsec, endMillsec, ellapsedMilli);
         Limelog("diff = %llu, diff2 = %llu", diff, diff2);
 
-        if (diff >= 0) {
+        if (diff2 <= 0) {
+            // sylar: if diff2 is <=0, use the hard-coded sleep time, otherwise the program crashes.
+            if (diff >= 0) {
+                gettimeofday(&startSleep, NULL);
+                time_t lstartsleepT;
+                long startSleepMs = (startSleep.tv_sec) * 1000 + (startSleep.tv_usec) / 1000 ;
+                Limelog("Going to sleep, using diff");
+                Sleep(diff - catchUp);
+                Limelog("Slept for %ld\n ms", (diff - catchUp));
+                gettimeofday(&endSleep, NULL);
+                time_t lendsleepT;
+                long endSleepMs = (endSleep.tv_sec) * 1000 + (endSleep.tv_usec) / 1000 ;
+                long slepTime = endSleepMs - startSleepMs;
+                catchUp = slepTime - diff;
+            }
+
+        // sylar: this is where avgEnQRate is not 0 and the program tries to matche the deq rate with enq rate
+        } else if (diff2 > 0) {
+
             gettimeofday(&startSleep, NULL);
             time_t lstartsleepT;
             long startSleepMs = (startSleep.tv_sec) * 1000 + (startSleep.tv_usec) / 1000 ;
-            Limelog("Going to sleep");
-            Sleep(diff - catchUp);
-            Limelog("Slept for %ld\n ms", (diff - catchUp));
+            Limelog("Going to sleep, using diff2");
+            Sleep(diff2 - catchUp);
+            Limelog("Slept for %ld\n ms", (diff2 - catchUp));
             gettimeofday(&endSleep, NULL);
             time_t lendsleepT;
             long endSleepMs = (endSleep.tv_sec) * 1000 + (endSleep.tv_usec) / 1000 ;
             long slepTime = endSleepMs - startSleepMs;
-            catchUp = slepTime - diff;
-
+            catchUp = slepTime - diff2;
         }
 
 

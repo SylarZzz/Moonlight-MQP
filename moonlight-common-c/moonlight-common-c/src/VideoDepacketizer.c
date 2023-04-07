@@ -30,6 +30,9 @@ static VIDEO_FRAME_HANDLE frameHandle;
 static int drstatusHandle;
 static int bufferSize = 10;
 
+// Hard-coded 16fps time for diff
+static int targetTime = 17;
+
 // Catch up time for dequeuing thread
 long catchUp = 0;
 
@@ -45,6 +48,11 @@ uint64_t eTimeForLog = 0;
 bool gotInitTime = false;
 bool gotFirstTime = false;
 struct timeval newTimer;
+
+// Variables for elapsed time for log
+struct timeval streamStart;
+static uint64_t startStreamTime = 0;
+bool gottime = false;
 
 
 
@@ -75,7 +83,6 @@ static uint64_t firstPacketReceiveTime;
 static unsigned int firstPacketPresentationTime;
 static bool dropStatePending;
 static bool idrFrameProcessed;
-static int targetTime = 17;
 
 #define DR_CLEANUP -1000
 
@@ -289,19 +296,15 @@ void openQl() {
     fprintf(enQRateFile, "Time,AvgEnQRate\n");
 }
 
-struct timeval waitForBuffer, streamStart;
-static long startStreamTime;
-int gettime = 0;
-
+uint64_t logTime = 0;
 
 int playoutBufferMain() {
 
     gettimeofday(&streamStart, NULL);
     time_t startStream;
-    long currTime = (streamStart.tv_sec) * 1000 + (streamStart.tv_usec) / 1000;
-    if (gettime == 0) {
-        startStreamTime = currTime;
-        gettime = 1;
+    if (!gottime) {
+        startStreamTime = (streamStart.tv_sec) * 1000 + (streamStart.tv_usec) / 1000;
+        gottime = true;
     }
 
 
@@ -309,7 +312,7 @@ int playoutBufferMain() {
     Limelog("In playoutBufferMain");
 
     if (usedforQl != 0) {
-        fprintf(ql, "state,startTime,frameQSize,drstatusQSize\n");
+        fprintf(ql, "state,startTime,frameQSize,drstatusQSize,time,enqRate,avgEnQRate\n");
         usedforQl = 0;
     }
 
@@ -357,10 +360,14 @@ int playoutBufferMain() {
             dequeue(frameQ);
             dequeue(drstatusQ);
             Limelog("Q size = %d", frameQ->size);
-            fprintf(ql, "PLAY,%llu,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
+            logTime = startMillsec - startStreamTime;
+            Limelog("PLAY: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
+            fprintf(ql, "PLAY,%llu,%d,%d,%llu,%llu,%ld\n", (startMillsec - startStreamTime), frameQ->size, drstatusQ->size, NULL, NULL, NULL);
         } else if (state == FILL) {
+            logTime = startMillsec - startStreamTime;
+            Limelog("FILL: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
             Limelog("In FILL: Did not dequeue because q size = %d", frameQSize);
-            fprintf(ql, "FILL,%llu,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
+            fprintf(ql, "FILL,%llu,%d,%d,%llu,%llu,%ld\n", (startMillsec - startStreamTime), frameQ->size, drstatusQ->size, NULL, NULL, NULL);
 
 
         }
@@ -368,7 +375,9 @@ int playoutBufferMain() {
         frameQSize = frameQ->size;
         drstatusQSize = drstatusQ->size;
         Limelog("Frame Q size = %d, drstatus Q size = %d", frameQSize, drstatusQSize);
-        fprintf(ql, "OUTSIDE,%llu,%d,%d\n", startMillsec, frameQSize, drstatusQSize);
+        logTime = startMillsec - startStreamTime;
+        Limelog("OUTSIDE: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
+        fprintf(ql, "OUTSIDE,%llu,%d,%d,%llu,%llu,%ld\n", (startMillsec - startStreamTime), frameQSize, drstatusQSize, NULL, NULL, NULL);
 
         PltUnlockMutex(&mutex);
 
@@ -506,6 +515,8 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     if (counter < 9) {
         interframeRates[counter] = elaspedT;
         Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
+        fprintf(ql, "ENQ,%llu,%d,%d,%llu,%llu,%lf\n", NULL, NULL, NULL, eTimeForLog, elaspedT, NULL);
+
         counter++;
     }
     // array filled, start calculating the enqueue rate
@@ -524,6 +535,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         for (int i = 0; i < 9; i++) {
             interframeRates[i] = interframeRates[i + 1];
         }
+        fprintf(ql, "ENQ,%llu,%d,%d,%llu,%llu,%lf\n", NULL, NULL, NULL, eTimeForLog, elaspedT, avgEnQRate);
         Limelog("Time: %llu, Average Enqueue Rate: %lf", eTimeForLog, avgEnQRate);
     }
 

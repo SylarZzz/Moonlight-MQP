@@ -357,10 +357,10 @@ int playoutBufferMain() {
             dequeue(frameQ);
             dequeue(drstatusQ);
             Limelog("Q size = %d", frameQ->size);
-            fprintf(ql, "PLAY,%lf,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
+            fprintf(ql, "PLAY,%llu,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
         } else if (state == FILL) {
             Limelog("In FILL: Did not dequeue because q size = %d", frameQSize);
-            fprintf(ql, "FILL,%lf,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
+            fprintf(ql, "FILL,%llu,%d,%d\n", startMillsec, frameQ->size, drstatusQ->size);
 
 
         }
@@ -368,7 +368,7 @@ int playoutBufferMain() {
         frameQSize = frameQ->size;
         drstatusQSize = drstatusQ->size;
         Limelog("Frame Q size = %d, drstatus Q size = %d", frameQSize, drstatusQSize);
-        fprintf(ql, "OUTSIDE,%lf,%d,%d\n", startMillsec, frameQSize, drstatusQSize);
+        fprintf(ql, "OUTSIDE,%llu,%d,%d\n", startMillsec, frameQSize, drstatusQSize);
 
         PltUnlockMutex(&mutex);
 
@@ -405,7 +405,7 @@ int playoutBufferMain() {
         struct timeval endSleep;
 
         gettimeofday(&endT, NULL);
-        gettimeofday(&startT, NULL);
+        //gettimeofday(&startT, NULL);
         time_t ltimeEnd;
         uint64_t endMillsec = (endT.tv_sec * (uint64_t) 1000) + (endT.tv_usec / 1000 );
         uint64_t ellapsedMilli = endMillsec - startMillsec;

@@ -7,7 +7,6 @@
 #include "VideoDepacketizer.h"
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 
-
 FILE *qLog;
 int usedforQlog = 1;
 int opened = 0;
@@ -166,10 +165,12 @@ void initializeVideoStream(void) {
     firstDataTimeMs = 0;
     receivedFullFrame = false;
 
+    /*
     Limelog("Before create thread call playoutBuffer");
 
     buffer = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
     Limelog("After create thread call playoutBuffer");
+    */
 }
 
 // Clean up the video stream
@@ -199,30 +200,14 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
-//static Queue *q;
 
-// TEST FUNCTION HELLO WORLD
-static void TestHello2() {
-    //q = createQueue();
-
-    PltCreateMutex(&helloMutex);
-    PltLockMutex(&helloMutex);
-    Limelog("%s","start sleep");
-    //queueTest();
-    //waitFor(30);
-    PltUnlockMutex(&helloMutex);
-    PltDeleteMutex(&helloMutex);
-
-}
-
-static void TestHello() {
-    helloNum+=1;
-    Limelog("%s","!!!!!!!!!!!");
-    //timer();
-}
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
 
+    Limelog("Before create thread call playoutBuffer");
+
+    buffer = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
+    Limelog("After create thread call playoutBuffer");
 
     if (called == 0) {
         openFile();
@@ -332,6 +317,7 @@ void notifyKeyFrameReceived(void) {
 
 // Decoder thread proc
 static void VideoDecoderThreadProc(void* context) {
+
     while (!PltIsThreadInterrupted(&decoderThread)) {
         VIDEO_FRAME_HANDLE frameHandle;
         PDECODE_UNIT decodeUnit;
@@ -423,12 +409,7 @@ int startVideoStream(void* rendererContext, int drFlags) {
 
     VideoCallbacks.start();
 
-    err = PltCreateThread("HELLOTHREAD", TestHello, NULL, &HELLO);
-    err = PltCreateThread("HELLOTHREAD2", TestHello2, NULL, &HELLO2);
-    TestHello();
-//    if (err != 0){
-//        PltCloseThread(&HELLO);
-//    }
+
 
     err = PltCreateThread("VideoRecv", VideoReceiveThreadProc, NULL, &receiveThread);
     if (err != 0) {

@@ -30,7 +30,7 @@ static PLT_MUTEX mutex;
 static VIDEO_FRAME_HANDLE frameHandle;
 static int drstatusHandle;
 bool checkedInitTime = false;
-static BUFFERTIME = 100;
+static BUFFERTIME = 500;
 static int maxQSize = 0;
 
 // Hard-coded 16fps time for diff
@@ -40,8 +40,8 @@ static int targetTime = 17;
 long catchUp = 0;
 
 // Variables and logs for Li..() call rate
-static int AVGSIZE = 100;
-uint64_t interframeRates[100];
+static int AVGSIZE = 10;
+uint64_t interframeRates[10];
 static long double avgEnQRate = 0;
 static int counter = 0;
 uint64_t elaspedT = 0;
@@ -53,11 +53,12 @@ bool gotInitTime = false;
 bool gotFirstTime = false;
 struct timeval newTimer;
 
-// Variables for elapsed time for log
+// Variables for elapsed time for log and just for general logging
 struct timeval streamStart;
 static uint64_t startStreamTime = 0;
 bool gottime = false;
 static uint64_t currTime = 0;
+static int itemNum = 0;
 
 
 struct timezone
@@ -301,6 +302,7 @@ void openQl() {
 }
 
 uint64_t logTime = 0;
+uint64_t startMillsec = 0;
 
 
 int playoutBufferMain() {
@@ -320,7 +322,7 @@ int playoutBufferMain() {
 
 
     if (usedforQl != 0) {
-        fprintf(ql, "state,startTime,frameQSize,drstatusQSize,time,enqRate,avgEnQRate\n");
+        fprintf(ql, "state,startTime,frameQSize,drstatusQSize,item,time,enqRate,avgEnQRate\n");
         usedforQl = 0;
     }
 
@@ -348,8 +350,6 @@ int playoutBufferMain() {
 
         if (calledLi) {
 
-            Limelog("In playoutBufferMain: called Li..()");
-
             gettimeofday(&streamStart, NULL);
             time_t startStream;
             if (!gottime) {
@@ -359,34 +359,43 @@ int playoutBufferMain() {
 
             gettimeofday(&startT, NULL);
             time_t ltimeStart;
-            uint64_t startMillsec = (startT.tv_sec * (uint64_t) 1000) + (startT.tv_usec / 1000 );
+            startMillsec = (startT.tv_sec * (uint64_t) 1000) + (startT.tv_usec / 1000 );
             uint64_t initBufferTime = startMillsec - startStreamTime;
 
-            PltLockMutex(&mutex);
 
+            //PltLockMutex(&mutex);
 
+            // Check if initial buffer time is reached or not. Use for setting the max q size
             if (!checkedInitTime) {
                 if (initBufferTime >= BUFFERTIME) {
                     maxQSize = frameQSize;  // set the max q size to the q size when the initial buffer time ends
                     Limelog("Initial buffer time reasched: maxQSize = %d", maxQSize);
                     checkedInitTime = true;
+                    state = PLAY;
                 } else if (initBufferTime < BUFFERTIME) {
                     state = FILL;
                     Limelog("Initial buffer time not reasched: In FILL state.");
-                    Limelog("Initial buffer time = %llu", initBufferTime);
                 }
-                // reached initial buffer time
-            } else {
 
-                if (frameQSize <= 0) {
-                    state = FILL;
-                    Limelog("In FILL state.");
-                } else if (frameQSize >= maxQSize) {
-                    state = PLAY;
-                    Limelog("In PLAY state.");
-                }
             }
+        } else {
+            gettimeofday(&startT, NULL);
+            time_t ltimeStart;
+            startMillsec = (startT.tv_sec * (uint64_t) 1000) + (startT.tv_usec / 1000 );
+        }
 
+
+            PltLockMutex(&mutex);
+
+
+            // Initial buffer time reached, using the maxQsize to determine state
+            if (frameQSize <= 0 && checkedInitTime) {
+                state = FILL;
+                Limelog("In FILL state.");
+            } else if (frameQSize >= maxQSize && checkedInitTime) {
+                state = PLAY;
+                Limelog("In PLAY state.");
+            }
 
             if (state == PLAY) {
                 Limelog("Dequeuing");
@@ -397,22 +406,22 @@ int playoutBufferMain() {
                 Limelog("Q size = %d", frameQ->size);
                 logTime = startMillsec - startStreamTime;
                 Limelog("PLAY: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
-                fprintf(ql, "PLAY,%llu,%d,%d,%llu,%llu,%ld\n", logTime, frameQ->size, drstatusQ->size, NULL, NULL, NULL);
+                fprintf(ql, "PLAY,%llu,%d,%d,%d,%llu,%llu,%ld\n", logTime, frameQ->size, drstatusQ->size, NULL, NULL, NULL, NULL);
             } else if (state == FILL) {
                 logTime = startMillsec - startStreamTime;
                 Limelog("FILL: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
                 Limelog("In FILL: Did not dequeue because q size = %d", frameQSize);
-                fprintf(ql, "FILL,%llu,%d,%d,%llu,%llu,%ld\n", logTime, frameQ->size, drstatusQ->size, NULL, NULL, NULL);
+                fprintf(ql, "FILL,%llu,%d,%d,%llu,%llu,%ld\n", logTime, frameQ->size, drstatusQ->size, NULL, NULL, NULL, NULL);
 
 
             }
+
+
 
             frameQSize = frameQ->size;
             drstatusQSize = drstatusQ->size;
             Limelog("Frame Q size = %d, drstatus Q size = %d", frameQSize, drstatusQSize);
             logTime = startMillsec - startStreamTime;
-            //Limelog("OUTSIDE: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
-            //fprintf(ql, "OUTSIDE,%llu,%d,%d,%llu,%llu,%ld\n", (startMillsec - startStreamTime), frameQSize, drstatusQSize, NULL, NULL, NULL);
 
             PltUnlockMutex(&mutex);
 
@@ -491,7 +500,7 @@ int playoutBufferMain() {
             }
 
 
-        }
+
     }
 
     return 0;
@@ -557,8 +566,8 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     if (counter < (AVGSIZE - 1)) {
         interframeRates[counter] = elaspedT;
         Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
-        fprintf(ql, "ENQ,%llu,%d,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, eTimeForLog, elaspedT, NULL);
-
+        fprintf(ql, "ENQ,%llu,%d,%d,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, itemNum, eTimeForLog, elaspedT, NULL);
+        itemNum++;
         counter++;
     }
     // array filled, start calculating the enqueue rate
@@ -577,8 +586,9 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         for (int i = 0; i < (AVGSIZE - 1); i++) {
             interframeRates[i] = interframeRates[i + 1];
         }
-        fprintf(ql, "ENQ,%llu,%d,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, eTimeForLog, elaspedT, avgEnQRate);
+        fprintf(ql, "ENQ,%llu,%d,%d,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, itemNum, eTimeForLog, elaspedT, avgEnQRate);
         Limelog("Time: %llu, Average Enqueue Rate: %lf", eTimeForLog, avgEnQRate);
+        itemNum++;
     }
 
 

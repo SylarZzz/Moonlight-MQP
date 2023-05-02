@@ -18,7 +18,7 @@ win32:!winrt {
 
 # Support debug and release builds from command line for CI
 CONFIG += debug_and_release
-
+QMAKE_CXXFLAGS += -O2
 # Run our compile tests
 load(configure)
 qtCompileTest(SL)

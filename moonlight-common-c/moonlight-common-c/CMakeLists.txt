@@ -25,7 +25,7 @@ endif()
 
 add_library(moonlight-common-c ${SRC_LIST})
 
-if (BUILD_SHARED_LIBS_OVERRIDE)
+if (BUILD_SHARED_LIBS_OVERRIDE)S
   unset(BUILD_SHARED_LIBS)
   unset(BUILD_SHARED_LIBS_OVERRIDE)
 endif()

@@ -1,12 +1,19 @@
+
 #include <stdlib.h>
 #include <stdio.h>
-
 #include "Limelight-internal.h"
 #include <time.h>
+#include "Queue.h"
+#include "VideoDepacketizer.h"
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+
+FILE *qLog;
+int usedforQlog = 1;
+int opened = 0;
 
 FILE *fp;
 int used = 1;
+int called = 0;
 int count = 0;
 char* names[100000];
 
@@ -22,13 +29,21 @@ static RTP_VIDEO_QUEUE rtpQueue;
 static SOCKET rtpSocket = INVALID_SOCKET;
 static SOCKET firstFrameSocket = INVALID_SOCKET;
 
+static PLT_THREAD HELLO;
+static PLT_THREAD HELLO2;
 static PLT_THREAD udpPingThread;
 static PLT_THREAD receiveThread;
 static PLT_THREAD decoderThread;
+static PLT_MUTEX helloMutex;
 
 static bool receivedDataFromPeer;
 static uint64_t firstDataTimeMs;
 static bool receivedFullFrame;
+
+static int helloNum=99999;
+
+
+
 
 // We can't request an IDR frame until the depacketizer knows
 // that a packet was lost. This timeout bounds the time that
@@ -43,6 +58,11 @@ struct timezone
   int  tz_minuteswest; /* minutes W of Greenwich */
   int  tz_dsttime;     /* type of dst correction */
 };
+
+void waitFor (unsigned int secs) {
+    unsigned int retTime = time(0) + secs;   // Get finishing time.
+    while (time(0) < retTime);               // Loop until it arrives.
+}
 
 int gettimeofday(struct timeval *tv, struct timezone *tz)
 {
@@ -83,9 +103,19 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 
 void openFile() {
     fp = fopen("aaaaaaa.csv","w+");
+    qLog = fopen("queueLog.csv","w+");
+
 }
 
-void logMsg(char *name, int num)
+void logQMsg(char state[], double startmsec, int frameQSize, int drQSize) {
+    if (usedforQlog != 0) {
+        fprintf(qLog, "state,startTime,frameQSize,drstatusQSize\n");
+        usedforQlog = 0;
+    }
+    fprintf(qLog, "%s,%lf,%d,%d\n", state, startmsec, frameQSize, drQSize);
+}
+
+void logMsg(char *name, int num, double startmsec, int frameQSize, int drQSize)
 {
     struct timeval  tv;
     gettimeofday(&tv, NULL);
@@ -94,29 +124,53 @@ void logMsg(char *name, int num)
 //    (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
 
 
-
     //FILE * fp;
     time_t ltime;
     //fp = fopen("aaaaaaa.csv","w+");
 
 
     if(used!=0){
-        fprintf(fp,"sec,usec,name,completedFECBlockCount\n");
+        fprintf(fp,"sec,usec,name,completedFECBlockCount,startTime,frameQSize,drstatusQSize\n");
         used-=1;
     }
 
-    fprintf(fp,"%ld,%ld,%s,%d\n", tv.tv_sec, tv.tv_usec, name, num);
+    if (usedforQlog != 0) {
+        fprintf(qLog, "startTime,frameQSize,drstatusQSize\n");
+        usedforQlog = 0;
+    }
+
+    fprintf(fp,"%ld,%ld,%s,%d,%lf,%d,%d\n", tv.tv_sec, tv.tv_usec, name, num, startmsec, frameQSize, drQSize);
 //    fclose(fp);
+
+    if (num == 99999) {
+        fprintf(qLog, "%lf,%d,%d\n", startmsec, frameQSize, drQSize);
+    }
 }
 
+PLT_THREAD bufferThread;
+int buffer;
 
 // Initialize the video stream
 void initializeVideoStream(void) {
+
+    if (called == 0) {
+        openFile();
+        called = 1;
+    }
+
+
     initializeVideoDepacketizer(StreamConfig.packetSize);
     RtpvInitializeQueue(&rtpQueue);
     receivedDataFromPeer = false;
     firstDataTimeMs = 0;
     receivedFullFrame = false;
+
+    /*
+    Limelog("Before create thread call playoutBuffer");
+
+    buffer = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
+    Limelog("After create thread call playoutBuffer");
+    */
 }
 
 // Clean up the video stream
@@ -146,12 +200,14 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
-int called = 0;
+
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
-    /*
-     * Adding logMsg here makes the streaming look glitchy
-     */
+
+    Limelog("Before create thread call playoutBuffer");
+
+    buffer = PltCreateThread("playoutBufferThread", playoutBufferMain, NULL, &bufferThread);
+    Limelog("After create thread call playoutBuffer");
 
     if (called == 0) {
         openFile();
@@ -159,7 +215,7 @@ static void VideoReceiveThreadProc(void* context) {
     }
 
     char name[] = "VideoReceiveThreadProc";
-    logMsg(name, NULL);
+    logMsg(name, NULL, .0, NULL, NULL);
 
 
     int err;
@@ -261,6 +317,7 @@ void notifyKeyFrameReceived(void) {
 
 // Decoder thread proc
 static void VideoDecoderThreadProc(void* context) {
+
     while (!PltIsThreadInterrupted(&decoderThread)) {
         VIDEO_FRAME_HANDLE frameHandle;
         PDECODE_UNIT decodeUnit;
@@ -352,6 +409,8 @@ int startVideoStream(void* rendererContext, int drFlags) {
 
     VideoCallbacks.start();
 
+
+
     err = PltCreateThread("VideoRecv", VideoReceiveThreadProc, NULL, &receiveThread);
     if (err != 0) {
         VideoCallbacks.stop();
@@ -397,7 +456,8 @@ int startVideoStream(void* rendererContext, int drFlags) {
             return LastSocketError();
         }
     }
-
+    PltCloseThread(&HELLO);
+    PltCloseThread(&HELLO2);
     // Start pinging before reading the first frame so GFE knows where
     // to send UDP data
     err = PltCreateThread("VideoPing", VideoPingThreadProc, NULL, &udpPingThread);

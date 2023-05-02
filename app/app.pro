@@ -130,6 +130,7 @@ macx {
 }
 
 SOURCES += \
+    Queue.cpp \
     backend/nvaddress.cpp \
     backend/nvapp.cpp \
     cli/pair.cpp \
@@ -170,6 +171,7 @@ SOURCES += \
     wm.cpp
 
 HEADERS += \
+    Queue.h \
     backend/nvaddress.h \
     backend/nvapp.h \
     cli/pair.h \

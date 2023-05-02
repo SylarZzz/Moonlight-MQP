@@ -1,0 +1,5 @@
+C:/Users/claypool/Desktop/Moonlight-MQP/build-Queue-Replacement_for_Desktop_Qt_6_3_2_MinGW_64_bit-Debug/CMakeFiles/Queue.dir
+C:/Users/claypool/Desktop/Moonlight-MQP/build-Queue-Replacement_for_Desktop_Qt_6_3_2_MinGW_64_bit-Debug/CMakeFiles/edit_cache.dir
+C:/Users/claypool/Desktop/Moonlight-MQP/build-Queue-Replacement_for_Desktop_Qt_6_3_2_MinGW_64_bit-Debug/CMakeFiles/rebuild_cache.dir
+C:/Users/claypool/Desktop/Moonlight-MQP/build-Queue-Replacement_for_Desktop_Qt_6_3_2_MinGW_64_bit-Debug/CMakeFiles/Queue_autogen_timestamp_deps.dir
+C:/Users/claypool/Desktop/Moonlight-MQP/build-Queue-Replacement_for_Desktop_Qt_6_3_2_MinGW_64_bit-Debug/CMakeFiles/Queue_autogen.dir

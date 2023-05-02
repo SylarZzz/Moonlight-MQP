@@ -30,7 +30,7 @@ static PLT_MUTEX mutex;
 static VIDEO_FRAME_HANDLE frameHandle;
 static int drstatusHandle;
 bool checkedInitTime = false;
-static BUFFERTIME = 500;
+static int BUFFERTIME = 500;
 static int maxQSize = 0;
 
 // Hard-coded 16fps time for diff
@@ -301,13 +301,69 @@ void openQl() {
     fprintf(enQRateFile, "Time,AvgEnQRate\n");
 }
 
+// sylar: connects the dequeued item with the program
+void renderFrame(PQUEUED_DECODE_UNIT qdu, int drStatus, PLENTRY_INTERNAL lastEntry) {
+    if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
+        notifyKeyFrameReceived();
+    }
+
+    if (drStatus == DR_NEED_IDR) {
+        Limelog("Requesting IDR frame on behalf of DR\n");
+        requestDecoderRefresh();
+    }
+    else if (drStatus == DR_OK && qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
+        // Remember that the IDR frame was processed. We can now use
+        // reference frame invalidation.
+        idrFrameProcessed = true;
+    }
+
+    while (qdu->decodeUnit.bufferList != NULL) {
+        lastEntry = (PLENTRY_INTERNAL)qdu->decodeUnit.bufferList;
+        qdu->decodeUnit.bufferList = lastEntry->entry.next;
+        free(lastEntry->allocPtr);
+    }
+
+    // We will have stack-allocated entries iff we have a direct-submit decoder
+    if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
+        free(qdu);
+    }
+
+}
+
+
+
 uint64_t logTime = 0;
 uint64_t startMillsec = 0;
+
+struct timeval deqT;
+static bool gotinitdeqT = false;
+static bool gotfirstdeqT = false;
+uint64_t initaldeqT = 0;
+uint64_t oldDeqT = 0;
+uint64_t newDeqT = 0;
+uint64_t elapsedDeqT = 0;
+struct timeval startStreamForSleep;
+uint64_t startStreamSleep = 0;
+static bool gotStartforSleep = false;
 
 
 int playoutBufferMain() {
 
     Limelog("In playoutBufferMain");
+
+    /*
+     *  sylar: get the while loop start time for sleep log.
+     *         The other startStreamTime is for enq and deq because the deq should only start
+     *         when Li..() is called and frames are being enqueued.
+     *         This is what the if (calledLi) is for
+     */
+
+    if (!gotStartforSleep) {
+        gettimeofday(&startStreamForSleep, NULL);
+        time_t lstartforsleep;
+        startStreamSleep = (startStreamForSleep.tv_sec * (uint64_t)1000) + (startStreamForSleep.tv_usec / 1000);
+        gotStartforSleep = true;
+    }
 
     /*
     gettimeofday(&streamStart, NULL);
@@ -322,7 +378,7 @@ int playoutBufferMain() {
 
 
     if (usedforQl != 0) {
-        fprintf(ql, "state,startTime,frameQSize,drstatusQSize,item,time,enqRate,avgEnQRate\n");
+        fprintf(ql, "state,startTime,frameQSize,drstatusQSize,deqTime,item,time,enqRate,avgEnQRate,workTime,diffType,diff,sleepTime,actualSleep,catchUpTime\n");
         usedforQl = 0;
     }
 
@@ -346,7 +402,8 @@ int playoutBufferMain() {
     frameQSize = frameQ->size;
     drstatusQSize  = drstatusQ->size;
 
-    while (1) {
+    while (1) {  
+
 
         if (calledLi) {
 
@@ -365,7 +422,7 @@ int playoutBufferMain() {
 
             //PltLockMutex(&mutex);
 
-            // Check if initial buffer time is reached or not. Use for setting the max q size
+            // sylar: Check if initial buffer time is reached or not. Use for setting the max q size
             if (!checkedInitTime) {
                 if (initBufferTime >= BUFFERTIME) {
                     maxQSize = frameQSize;  // set the max q size to the q size when the initial buffer time ends
@@ -403,15 +460,35 @@ int playoutBufferMain() {
                 drStatus = front(drstatusQ);
                 dequeue(frameQ);
                 dequeue(drstatusQ);
+
+                // sylar: log first deq time
+                gettimeofday(&deqT);
+                time_t lnewT;
+                if (!gotinitdeqT) {
+                    initaldeqT = (deqT.tv_sec * (uint64_t)1000) + (deqT.tv_usec / 1000);
+                    gotinitdeqT = true;
+                }
+
+                // sylar: set the first elapsed time to 0, otherwise the number is massive
+                if (!gotfirstdeqT) {
+                    elapsedDeqT = newDeqT - oldDeqT;
+                    oldDeqT = (deqT.tv_sec * (uint64_t)1000) + (deqT.tv_usec / 1000);
+                    gotfirstdeqT = true;
+                } else if (gotfirstdeqT) {
+                    newDeqT = (deqT.tv_sec * (uint64_t)1000) + (deqT.tv_usec / 1000);
+                    elapsedDeqT = newDeqT - oldDeqT;
+                    oldDeqT = newDeqT;
+                }
+
                 Limelog("Q size = %d", frameQ->size);
                 logTime = startMillsec - startStreamTime;
                 Limelog("PLAY: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
-                fprintf(ql, "PLAY,%llu,%d,%d,%d,%llu,%llu,%ld\n", logTime, frameQ->size, drstatusQ->size, NULL, NULL, NULL, NULL);
+                fprintf(ql, "PLAY,%llu,%d,%d,%llu\n", logTime, frameQ->size, drstatusQ->size, elapsedDeqT);
             } else if (state == FILL) {
                 logTime = startMillsec - startStreamTime;
                 Limelog("FILL: startMillsec(%llu) - startStreamTime(%llu) = %llu", startMillsec, startStreamTime, logTime);
                 Limelog("In FILL: Did not dequeue because q size = %d", frameQSize);
-                fprintf(ql, "FILL,%llu,%d,%d,%llu,%llu,%ld\n", logTime, frameQ->size, drstatusQ->size, NULL, NULL, NULL, NULL);
+                fprintf(ql, "FILL,%llu,%d,%d,%llu\n", logTime, frameQ->size, drstatusQ->size,0);
 
 
             }
@@ -421,13 +498,14 @@ int playoutBufferMain() {
             frameQSize = frameQ->size;
             drstatusQSize = drstatusQ->size;
             Limelog("Frame Q size = %d, drstatus Q size = %d", frameQSize, drstatusQSize);
-            logTime = startMillsec - startStreamTime;
+            //logTime = startMillsec - startStreamTime;
 
             PltUnlockMutex(&mutex);
 
             // sylar: Connecting dequeued item to the rest of the program if in PLAY
 
             if (state == PLAY) {
+
                 if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
                     notifyKeyFrameReceived();
                 }
@@ -452,8 +530,8 @@ int playoutBufferMain() {
                 if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
                     free(qdu);
                 }
-
             }
+
             struct timeval startSleep;
             struct timeval endSleep;
 
@@ -461,8 +539,8 @@ int playoutBufferMain() {
             time_t ltimeEnd;
             uint64_t endMillsec = (endT.tv_sec * (uint64_t) 1000) + (endT.tv_usec / 1000 );
             uint64_t ellapsedMilli = endMillsec - startMillsec;
-            long diff = targetTime - ellapsedMilli;
-            long diff2 = (uint64_t)avgEnQRate - ellapsedMilli;
+            long diff = (long) targetTime - (long) ellapsedMilli;
+            long diff2 = (long) avgEnQRate - (long) ellapsedMilli;
 
             Limelog("avg = %llu, start = %llu, end = %llu, elapsed = %llu", (uint64_t)avgEnQRate, startMillsec, endMillsec, ellapsedMilli);
             Limelog("diff = %llu, diff2 = %llu", diff, diff2);
@@ -472,34 +550,44 @@ int playoutBufferMain() {
                 if (diff >= 0) {
                     gettimeofday(&startSleep, NULL);
                     time_t lstartsleepT;
-                    long startSleepMs = (startSleep.tv_sec) * 1000 + (startSleep.tv_usec) / 1000 ;
+                    uint64_t startSleepMs = (startSleep.tv_sec * (uint64_t) 1000) + (startSleep.tv_usec) / 1000 ;
                     Limelog("Going to sleep, using diff");
-                    Sleep(diff - catchUp);
+                    long sleep = diff - catchUp;
+                    Sleep(sleep);
                     Limelog("Slept for %ld\n ms", (diff - catchUp));
                     gettimeofday(&endSleep, NULL);
                     time_t lendsleepT;
-                    long endSleepMs = (endSleep.tv_sec) * 1000 + (endSleep.tv_usec) / 1000 ;
-                    long slepTime = endSleepMs - startSleepMs;
+                    uint64_t endSleepMs = (endSleep.tv_sec * (uint64_t) 1000) + (endSleep.tv_usec / 1000) ;
+                    long slepTime = (long) endSleepMs - (long) startSleepMs;
                     catchUp = slepTime - diff;
+
+                    // log sleep variables
+                    uint64_t logTime = endSleepMs - startStreamSleep;
+                    //fprintf(ql, "SLEEP,%llu,%d,%d,%llu,%d,%llu,%llu,%ld,%llu,diff,%ld,%ld,%ld,%ld\n", logTime, NULL, NULL, NULL, NULL,
+                    //                        NULL, NULL, NULL, ellapsedMilli, diff, sleep, slepTime, catchUp);
                 }
 
-                // sylar: this is where avgEnQRate is not 0 and the program tries to matche the deq rate with enq rate
+              // sylar: this is where avgEnQRate is not 0 and the program tries to matche the deq rate with enq rate
             } else if (diff2 > 0) {
 
                 gettimeofday(&startSleep, NULL);
                 time_t lstartsleepT;
-                long startSleepMs = (startSleep.tv_sec) * 1000 + (startSleep.tv_usec) / 1000 ;
+                uint64_t startSleepMs = (startSleep.tv_sec * (uint64_t) 1000) + (startSleep.tv_usec / 1000) ;
                 Limelog("Going to sleep, using diff2");
-                Sleep(diff2 - catchUp);
+                long sleep = diff2 - catchUp;
+                Sleep(sleep);
                 Limelog("Slept for %ld\n ms", (diff2 - catchUp));
                 gettimeofday(&endSleep, NULL);
                 time_t lendsleepT;
-                long endSleepMs = (endSleep.tv_sec) * 1000 + (endSleep.tv_usec) / 1000 ;
-                long slepTime = endSleepMs - startSleepMs;
+                uint64_t endSleepMs = (endSleep.tv_sec * (uint64_t) 1000) + (endSleep.tv_usec / 1000) ;
+                long slepTime = (long) endSleepMs - (long) startSleepMs;
                 catchUp = slepTime - diff2;
+
+                // log sleep variables
+                uint64_t logTime = endSleepMs - startStreamSleep;
+                //fprintf(ql, "SLEEP,%llu,%d,%d,%llu,%d,%llu,%llu,%ld,%llu,diff2,%ld,%ld,%ld,%ld\n", logTime, NULL, NULL, NULL, NULL,
+                //                    NULL, NULL, NULL, ellapsedMilli, diff2, sleep, slepTime, catchUp);
             }
-
-
 
     }
 
@@ -566,7 +654,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     if (counter < (AVGSIZE - 1)) {
         interframeRates[counter] = elaspedT;
         Limelog("Counter = %d, framerate = %llu", counter, elaspedT);
-        fprintf(ql, "ENQ,%llu,%d,%d,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, itemNum, eTimeForLog, elaspedT, NULL);
+        fprintf(ql, "ENQ,%llu,%d,%d,%llu,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, NULL, itemNum, eTimeForLog, elaspedT);
         itemNum++;
         counter++;
     }
@@ -586,7 +674,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         for (int i = 0; i < (AVGSIZE - 1); i++) {
             interframeRates[i] = interframeRates[i + 1];
         }
-        fprintf(ql, "ENQ,%llu,%d,%d,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, itemNum, eTimeForLog, elaspedT, avgEnQRate);
+        fprintf(ql, "ENQ,%llu,%d,%d,%llu,%d,%llu,%llu,%lf\n", globalElapsedT, NULL, NULL, NULL, itemNum, eTimeForLog, elaspedT, avgEnQRate);
         Limelog("Time: %llu, Average Enqueue Rate: %lf", eTimeForLog, avgEnQRate);
         itemNum++;
     }
@@ -610,7 +698,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
         Limelog("In DO_SPLIT.");
         return;
 #endif
-
+/*
 
     if (qdu->decodeUnit.frameType == FRAME_TYPE_IDR) {
         notifyKeyFrameReceived();
@@ -637,7 +725,7 @@ void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE handle, int drStatus) {
     if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
         free(qdu);
     }
-
+*/
 }
 
 static bool isSeqReferenceFrameStart(PBUFFER_DESC buffer) {
